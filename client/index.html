@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phantom Stocks</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100vw;
+      min-height: 100vh;
+      background-color: #000;
+      overflow-x: hidden;
+      position: relative;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      color: #ffffff;
+    }
+
+    /* Added page transition container */
+    .page-container {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    .page {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      min-height: 100vh;
+      opacity: 1;
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .page.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-20px);
+    }
+
+    .home-page {
+      position: relative;
+      overflow-y: auto;
+    }
+
+    .auth-page {
+      position: fixed;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1.5rem 3rem;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      background: transparent;
+    }
+
+    .sign-in-btn {
+      background-color: transparent;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.75rem 2rem;
+      font-size: 0.95rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border-radius: 4px;
+    }
+
+    .sign-in-btn:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 2rem;
+      z-index: 10;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .title {
+      color: #ffffff;
+      font-size: 5rem;
+      font-weight: 300;
+      letter-spacing: 2px;
+      text-align: center;
+    }
+
+    .beta-badge {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 400;
+      letter-spacing: 1px;
+      border-radius: 4px;
+      margin-top: -2rem;
+    }
+
+    .subtitle {
+      font-size: 1.5rem;
+      font-weight: 300;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+    }
+
+    .powered-by {
+      font-size: 0.85rem;
+      font-weight: 300;
+      opacity: 0.6;
+      letter-spacing: 0.5px;
+    }
+
+    .about-section {
+      position: relative;
+      z-index: 10;
+      padding: 6rem 3rem;
+      max-width: 900px;
+      margin: 0 auto;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .about-title {
+      font-size: 2.5rem;
+      font-weight: 300;
+      letter-spacing: 1px;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .about-content {
+      font-size: 1.1rem;
+      font-weight: 300;
+      line-height: 1.8;
+      opacity: 0.9;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .contact-info {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .contact-label {
+      font-size: 0.9rem;
+      font-weight: 300;
+      opacity: 0.6;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+
+    .contact-email {
+      font-size: 1.1rem;
+      font-weight: 300;
+      color: #ffffff;
+      text-decoration: none;
+      opacity: 0.9;
+      transition: opacity 0.3s ease;
+    }
+
+    .contact-email:hover {
+      opacity: 1;
+    }
+
+    /* Added auth module styles */
+    .auth-module {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 3rem;
+      width: 90%;
+      max-width: 450px;
+      max-height: 90vh;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .auth-tab {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 1.1rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      padding: 0.75rem 0;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border-bottom: 2px solid transparent;
+      font-family: inherit;
+    }
+
+    .auth-tab.active {
+      color: #ffffff;
+      border-bottom-color: #a855f7;
+    }
+
+    .auth-form {
+      display: none;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    .auth-form.active {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      opacity: 0.8;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 0.875rem;
+      font-size: 0.95rem;
+      font-weight: 300;
+      color: #ffffff;
+      font-family: inherit;
+      transition: all 0.3s ease;
+    }
+
+    .form-input:focus,
+    .form-select:focus {
+      outline: none;
+      border-color: rgba(168, 85, 247, 0.5);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .form-input::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .form-select {
+      cursor: pointer;
+    }
+
+    .form-select option {
+      background: #000;
+      color: #ffffff;
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 1rem;
+      font-size: 1rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 1rem;
+      font-family: inherit;
+    }
+
+    .submit-btn:hover {
+      background: rgba(0, 0, 0, 0.7);
+      border-color: rgba(255, 255, 255, 0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .back-btn {
+      position: absolute;
+      top: 2rem;
+      left: 2rem;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.9rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      font-family: inherit;
+      z-index: 100;
+    }
+
+    .back-btn:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .streamline {
+      position: fixed;
+      width: 2px;
+      height: 150%;
+      transform-origin: center;
+      opacity: 0.8;
+      z-index: 1;
+    }
+
+    .purple {
+      background: linear-gradient(180deg, transparent, #a855f7, transparent);
+      box-shadow: 0 0 20px #a855f7, 0 0 40px #a855f7, 0 0 60px #a855f7;
+    }
+
+    .red {
+      background: linear-gradient(180deg, transparent, #ef4444, transparent);
+      box-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444, 0 0 60px #ef4444;
+    }
+
+    .line-1 { left: 10%; top: -25%; transform: rotate(-20deg); }
+    .line-2 { left: 25%; top: -25%; transform: rotate(-20deg); }
+    .line-3 { left: 40%; top: -25%; transform: rotate(-20deg); }
+    .line-4 { left: 55%; top: -25%; transform: rotate(-20deg); }
+    .line-5 { left: 70%; top: -25%; transform: rotate(-20deg); }
+    .line-6 { left: 85%; top: -25%; transform: rotate(-20deg); }
+    .line-7 { left: 17%; top: -25%; transform: rotate(-20deg); }
+    .line-8 { left: 62%; top: -25%; transform: rotate(-20deg); }
+
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      color: #fca5a5;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .header {
+        padding: 1rem 1.5rem;
+      }
+
+      .title {
+        font-size: 3rem;
+      }
+
+      .subtitle {
+        font-size: 1.2rem;
+      }
+
+      .about-section {
+        padding: 4rem 1.5rem;
+      }
+
+      .about-title {
+        font-size: 2rem;
+      }
+
+      .about-content {
+        font-size: 1rem;
+      }
+
+      .auth-module {
+        padding: 2rem 1.5rem;
+      }
+
+      .form-row {
+        flex-direction: column;
+        gap: 0;
+      }
+
+      .back-btn {
+        top: 1rem;
+        left: 1rem;
+      }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Background streamlines -->
+  <div class="streamline purple line-1"></div>
+  <div class="streamline red line-2"></div>
+  <div class="streamline purple line-3"></div>
+  <div class="streamline red line-4"></div>
+  <div class="streamline purple line-5"></div>
+  <div class="streamline red line-6"></div>
+  <div class="streamline purple line-7"></div>
+  <div class="streamline red line-8"></div>
+
+  <!-- Added page container with home and auth pages -->
+  <div class="page-container">
+    <!-- Home Page -->
+    <div class="page home-page" id="homePage">
+      <header class="header">
+        <button class="sign-in-btn" id="signInBtn">Sign In</button>
+      </header>
+
+      <section class="hero">
+        <div class="logo-container">
+          <h1 class="title">Phantom Stocks</h1>
+          <span class="beta-badge">BETA</span>
+        </div>
+        <p class="subtitle">Next Gen Paper Trading</p>
+        <p class="powered-by">Powered with TradingView Lightweight Charts v5.0.0</p>
+      </section>
+
+      <section class="about-section">
+        <h2 class="about-title">About Us</h2>
+        <p class="about-content">
+          At Phantom Stocks, we are committed to democratizing financial education through our comprehensive paper trading platform. 
+          Our mission is to provide aspiring traders and investors with a risk-free environment to develop and refine their trading strategies. 
+          We have developed an interactive educational course paired with advanced trading simulation tools, designed to equip individuals 
+          with the essential skills and knowledge needed to navigate financial markets with confidence. Our platform offers accessible, 
+          hands-on experience that bridges the gap between theoretical learning and practical application, empowering users to enhance 
+          their financial literacy and trading proficiency.
+        </p>
+        <div class="contact-info">
+          <p class="contact-label">Contact Us</p>
+          <a href="mailto:phantom.stocks26@gmail.com" class="contact-email">phantom.stocks26@gmail.com</a>
+        </div>
+      </section>
+    </div>
+
+    <!-- Auth Page -->
+    <div class="page auth-page hidden" id="authPage">
+      <button class="back-btn" id="backBtn">← Back</button>
+      
+      <div class="auth-module">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="signin">Sign In</button>
+          <button class="auth-tab" data-tab="signup">Create Account</button>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <!-- Sign In Form -->
+        <form class="auth-form active" id="signinForm">
+          <div class="form-group">
+            <label class="form-label" for="signin-email">Email</label>
+            <input type="email" id="signin-email" class="form-input" placeholder="your@email.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signin-password">Password</label>
+            <input type="password" id="signin-password" class="form-input" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="submit-btn">Sign In</button>
+        </form>
+
+        <!-- Create Account Form -->
+        <form class="auth-form" id="signupForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="signup-firstname">First Name</label>
+              <input type="text" id="signup-firstname" class="form-input" placeholder="John" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="signup-lastname">Last Name</label>
+              <input type="text" id="signup-lastname" class="form-input" placeholder="Doe" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signup-email">Email</label>
+            <input type="email" id="signup-email" class="form-input" placeholder="your@email.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signup-birthday">Birthday</label>
+            <input type="date" id="signup-birthday" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signup-password">Password</label>
+            <input type="password" id="signup-password" class="form-input" placeholder="••••••••" required minlength="6">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signup-confirm">Confirm Password</label>
+            <input type="password" id="signup-confirm" class="form-input" placeholder="••••••••" required minlength="6">
+          </div>
+          <button type="submit" class="submit-btn">Create Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { signUp, login } from './src/auth/auth.js';
+    import { redirectIfAuthenticated } from './src/auth/authGuard.js';
+
+    // Check if already authenticated
+    redirectIfAuthenticated();
+
+    const homePage = document.getElementById('homePage');
+    const authPage = document.getElementById('authPage');
+    const signInBtn = document.getElementById('signInBtn');
+    const backBtn = document.getElementById('backBtn');
+    const authTabs = document.querySelectorAll('.auth-tab');
+    const authForms = document.querySelectorAll('.auth-form');
+
+    // Navigate to auth page
+    signInBtn.addEventListener('click', () => {
+      homePage.classList.add('hidden');
+      authPage.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    });
+
+    // Navigate back to home page
+    backBtn.addEventListener('click', () => {
+      authPage.classList.add('hidden');
+      homePage.classList.remove('hidden');
+      document.body.style.overflow = 'auto';
+      hideError();
+    });
+
+    // Tab switching
+    authTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.tab;
+        
+        // Update active tab
+        authTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update active form
+        authForms.forEach(form => {
+          if (form.id === `${targetTab}Form`) {
+            form.classList.add('active');
+          } else {
+            form.classList.remove('active');
+          }
+        });
+
+        hideError();
+      });
+    });
+
+    // Sign In Form
+    document.getElementById('signinForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const email = document.getElementById('signin-email').value;
+      const password = document.getElementById('signin-password').value;
+      
+      const btn = e.target.querySelector('.submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      hideError();
+      
+      try {
+        await login(email, password);
+        // Redirect happens in auth.js
+      } catch (error) {
+        showError(error.message || 'Login failed. Please check your credentials.');
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+
+    // Sign Up Form
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const firstName = document.getElementById('signup-firstname').value;
+      const lastName = document.getElementById('signup-lastname').value;
+      const email = document.getElementById('signup-email').value;
+      const birthday = document.getElementById('signup-birthday').value;
+      const password = document.getElementById('signup-password').value;
+      const confirmPassword = document.getElementById('signup-confirm').value;
+      
+      // Validate passwords match
+      if (password !== confirmPassword) {
+        showError('Passwords do not match');
+        return;
+      }
+      
+      // Validate password length
+      if (password.length < 6) {
+        showError('Password must be at least 6 characters');
+        return;
+      }
+      
+      const btn = e.target.querySelector('.submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+      hideError();
+      
+      try {
+        // Create username from first and last name
+        const username = `${firstName} ${lastName}`;
+        
+        await signUp(email, password, username, birthday);
+        // Redirect happens in auth.js
+      } catch (error) {
+        showError(error.message || 'Signup failed. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+    }
+
+    function hideError() {
+      document.getElementById('errorMessage').classList.remove('show');
+    }
+  </script>
+</body>
+</html>

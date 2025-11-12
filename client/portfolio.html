@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Stocks - Portfolio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="portfolio-styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">PS</div>
+                <span class="logo-text">Phantom Stocks</span>
+            </div>
+            
+            <nav class="nav-section">
+                <div class="nav-title">Main</div>
+                <a href="portfolio.html" class="nav-item active">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    Portfolio
+                </a>
+                <a href="trading.html" class="nav-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    Trading
+                </a>
+            </nav>
+            
+            <nav class="nav-section">
+                <div class="nav-title">Learn</div>
+                <a href="courses.html" class="nav-item">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                    Courses
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="breadcrumb">
+                    <span>Phantom Stocks</span>
+                    <span>/</span>
+                    <span>Portfolio</span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" id="newsBtn">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+                        News
+                    </button>
+                    <button class="btn btn-secondary" id="portfolioSummaryBtn">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        Summary
+                    </button>
+                    <div class="avatar" id="userAvatar">U</div>
+                </div>
+            </header>
+
+            <!-- Dashboard Content -->
+            <div class="dashboard-content">
+                <div class="greeting">
+                    <h1 id="welcomeMessage">Good Morning, User</h1>
+                    <p>Track your portfolio performance and manage your investments</p>
+                </div>
+                
+                <div class="grid grid-3">
+                    <!-- Portfolio Performance Chart -->
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <div class="card portfolio-performance-card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-title">Portfolio Performance</div>
+                                    <div class="card-subtitle">Track your investment growth over time</div>
+                                </div>
+                                <button class="btn btn-ghost">
+                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                </button>
+                            </div>
+                            <div class="time-periods">
+                                <button class="time-period active" data-period="1D">1D</button>
+                                <button class="time-period" data-period="1W">1W</button>
+                                <button class="time-period" data-period="1M">1M</button>
+                                <button class="time-period" data-period="3M">3M</button>
+                                <button class="time-period" data-period="1Y">1Y</button>
+                            </div>
+                            <div class="chart-container" id="chartContainer">
+                                <svg class="chart-svg" id="chartSvg" viewBox="0 0 800 220">
+                                    <!-- Chart will be drawn here -->
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        <!-- Latest Transactions -->
+                        <div class="card latest-transactions-card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-title">Latest Transactions</div>
+                                    <div class="card-subtitle">Your recent trading activity</div>
+                                </div>
+                                <button class="btn btn-ghost">
+                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                </button>
+                            </div>
+                            <div id="transactionsList">
+                                <p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">No transactions yet - start trading to see your activity</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column -->
+                    <div class="right-column">
+                        <!-- Portfolio Value -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-subtitle">Available to Trade</div>
+                                    <div class="portfolio-value" id="availableCash">$10,000.00</div>
+                                </div>
+                                <button class="btn btn-ghost">
+                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Asset Allocation -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-title">Asset Allocation</div>
+                                    <div class="card-subtitle">Your investment distribution</div>
+                                </div>
+                                <button class="btn btn-ghost">
+                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                </button>
+                            </div>
+                            <div class="profit-display">
+                                <div class="card-subtitle">Total Portfolio Value</div>
+                                <div class="profit-value" id="totalPortfolioValue">$10,000.00</div>
+                                <div class="profit-change" id="portfolioChange">No change yet</div>
+                            </div>
+                            <!-- DONUT CHART ADDED HERE -->
+                            <div style="position: relative; height: 250px; margin-top: 1rem;">
+                                <canvas id="assetAllocationChart"></canvas>
+                            </div>
+                            <div id="assetAllocationLegend" style="margin-top: 1rem; font-size: 0.75rem;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Portfolio Summary Modal -->
+    <div id="portfolioSummaryModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('portfolioSummaryModal')">&times;</span>
+            <h2>Portfolio Summary</h2>
+            <div id="portfolioSummaryContent">
+                <!-- Content will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Settings Modal -->
+    <div id="accountModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('accountModal')">&times;</span>
+            <h2>Account Settings</h2>
+            
+            <div class="settings-group">
+                <h3>Account Information</h3>
+                <div class="form-group">
+                    <label for="currentEmail">Email</label>
+                    <input type="email" id="currentEmail" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="currentUsername">Username</label>
+                    <input type="text" id="currentUsername" disabled>
+                </div>
+            </div>
+            
+            <div class="settings-group">
+                <h3>Change Password</h3>
+                <div class="form-group">
+                    <label for="currentPassword">Current Password</label>
+                    <input type="password" id="currentPassword" placeholder="Enter current password">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <input type="password" id="newPassword" placeholder="Enter new password" minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirmNewPassword">Confirm New Password</label>
+                    <input type="password" id="confirmNewPassword" placeholder="Confirm new password" minlength="6">
+                </div>
+                <button class="btn btn-primary" id="changePasswordBtn">Update Password</button>
+                <div class="error-message" id="passwordError"></div>
+                <div class="success-message" id="passwordSuccess"></div>
+            </div>
+            
+            <div class="settings-group">
+                <button class="btn" id="logoutBtn" style="width: 100%; border-color: #dc2626; color: #dc2626;">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- News Modal -->
+    <div id="newsModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close" onclick="closeModal('newsModal')">&times;</span>
+            <h2>Market News & Insights</h2>
+            <div id="newsList">
+                <!-- News items will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="portfolio-logic.js"></script>
+</body>
+</html>

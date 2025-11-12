@@ -1,0 +1,35 @@
+{
+    "name": "phantom-stocks-backend",
+    "version": "1.0.0",
+    "description": "Paper trading platform backend with Supabase and Polygon.io integration",
+    "type": "module",
+    "main": "server-complete.js",
+    "scripts": {
+      "start": "node server-complete.js",
+      "dev": "nodemon server-complete.js",
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+      "trading",
+      "stocks",
+      "paper-trading",
+      "supabase",
+      "polygon"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+      "@supabase/supabase-js": "^2.38.0",
+      "cors": "^2.8.5",
+      "dotenv": "^16.3.1",
+      "express": "^4.18.2",
+      "node-cron": "^3.0.2",
+      "node-fetch": "^3.3.2"
+    },
+    "devDependencies": {
+      "nodemon": "^3.0.1"
+    },
+    "engines": {
+      "node": ">=18.0.0"
+    }
+  }

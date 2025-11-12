@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading - Phantom Stocks</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #000000;
+      color: #ffffff;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-weight: 300;
+    }
+
+    /* Header */
+    .header {
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(55, 65, 81, 0.3);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 400;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: transparent;
+      border: 1px solid #a855f7;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #a855f7;
+      font-weight: 400;
+      font-size: 12px;
+    }
+
+    .nav {
+      display: flex;
+      gap: 24px;
+    }
+
+    .nav-link {
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 300;
+      transition: color 0.3s;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      color: #ffffff;
+    }
+
+    .user-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .cash-display {
+      color: #10b981;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .username {
+      color: #d1d5db;
+      font-size: 14px;
+      font-weight: 300;
+    }
+
+    .logout-btn {
+      padding: 8px 16px;
+      background: transparent;
+      border: 1px solid rgba(220, 38, 38, 0.5);
+      border-radius: 6px;
+      color: #dc2626;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 300;
+      font-family: inherit;
+    }
+
+    .logout-btn:hover {
+      background: rgba(220, 38, 38, 0.1);
+      border-color: #dc2626;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(55, 65, 81, 0.3);
+      padding: 12px 24px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    /* Timeframe Buttons */
+    .timeframe-selector {
+      display: flex;
+      gap: 0px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .timeframe-btn {
+      padding: 6px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: #9ca3af;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 400;
+      font-family: inherit;
+    }
+
+    .timeframe-btn.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+
+    .timeframe-btn:hover:not(.active) {
+      color: #ffffff;
+    }
+
+    /* Search */
+    .search-container {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+      transition: all 0.3s;
+      font-weight: 300;
+      font-family: inherit;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #a855f7;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .search-input::placeholder {
+      color: #6b7280;
+    }
+
+    .autocomplete-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      display: none;
+      z-index: 1000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .autocomplete-dropdown.show {
+      display: block;
+    }
+
+    .autocomplete-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(55, 65, 81, 0.2);
+      transition: background 0.2s;
+    }
+
+    .autocomplete-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .autocomplete-item:last-child {
+      border-bottom: none;
+    }
+
+    .autocomplete-symbol {
+      font-weight: 500;
+      font-size: 14px;
+      color: #ffffff;
+    }
+
+    .autocomplete-name {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 2px;
+      font-weight: 300;
+    }
+
+    /* Dropdown Buttons */
+    .dropdown-container {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-btn {
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 6px;
+      color: #9ca3af;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 400;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dropdown-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(55, 65, 81, 0.5);
+      color: #ffffff;
+    }
+
+    .dropdown-btn.active {
+      background: rgba(168, 85, 247, 0.1);
+      border-color: #a855f7;
+      color: #a855f7;
+    }
+
+    .dropdown-arrow {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .dropdown-btn.open .dropdown-arrow {
+      transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 8px;
+      padding: 8px;
+      min-width: 180px;
+      display: none;
+      z-index: 1000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-item {
+      padding: 10px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s;
+      font-size: 13px;
+      color: #d1d5db;
+      font-weight: 300;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+    }
+
+    .dropdown-item.active {
+      color: #a855f7;
+      background: rgba(168, 85, 247, 0.1);
+    }
+
+    /* Indicator Checkboxes */
+    .indicator-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s;
+      font-size: 13px;
+      font-weight: 300;
+    }
+
+    .indicator-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .indicator-checkbox {
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid #6b7280;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .indicator-item.active .indicator-checkbox {
+      background: #a855f7;
+      border-color: #a855f7;
+    }
+
+    .indicator-item.active .indicator-checkbox::after {
+      content: '✓';
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .indicator-label {
+      color: #d1d5db;
+    }
+
+    .indicator-item.active .indicator-label {
+      color: #ffffff;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Chart Container */
+    #chart-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Buy/Sell Card */
+    .trade-card {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 300px;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 12px;
+      padding: 20px;
+      z-index: 50;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      display: none;
+    }
+
+    .trade-card-header {
+      margin-bottom: 16px;
+    }
+
+    .stock-symbol {
+      font-size: 22px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #ffffff;
+    }
+
+    .stock-name {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-bottom: 12px;
+      font-weight: 300;
+    }
+
+    .stock-price {
+      font-size: 28px;
+      font-weight: 500;
+      color: #10b981;
+      margin-bottom: 4px;
+    }
+
+    .stock-change {
+      font-size: 14px;
+      font-weight: 400;
+    }
+
+    .stock-change.positive {
+      color: #10b981;
+    }
+
+    .stock-change.negative {
+      color: #ef4444;
+    }
+
+    .trade-divider {
+      height: 1px;
+      background: rgba(55, 65, 81, 0.3);
+      margin: 16px 0;
+    }
+
+    .stock-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+
+    .detail-label {
+      color: #9ca3af;
+      font-weight: 300;
+    }
+
+    .detail-value {
+      color: #ffffff;
+      text-align: right;
+      font-weight: 400;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #d1d5db;
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+      transition: all 0.3s;
+      font-weight: 300;
+      font-family: inherit;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #a855f7;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .total-display {
+      text-align: right;
+      color: #9ca3af;
+      font-size: 13px;
+      margin-top: 8px;
+      font-weight: 300;
+    }
+
+    .total-amount {
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .trade-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .trade-btn {
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .buy-btn {
+      background: #10b981;
+      color: white;
+    }
+
+    .buy-btn:hover {
+      background: #059669;
+      transform: translateY(-1px);
+    }
+
+    .sell-btn {
+      background: #ef4444;
+      color: white;
+    }
+
+    .sell-btn:hover {
+      background: #dc2626;
+      transform: translateY(-1px);
+    }
+
+    .trade-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 12px;
+      color: #fca5a5;
+      font-size: 12px;
+      display: none;
+      font-weight: 300;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .success-message {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 12px;
+      color: #6ee7b7;
+      font-size: 12px;
+      display: none;
+      font-weight: 300;
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(55, 65, 81, 0.3);
+      border-top-color: #a855f7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      margin-top: 16px;
+      color: #9ca3af;
+      font-size: 14px;
+      font-weight: 300;
+    }
+
+    /* Scrollbar Styling */
+    .autocomplete-dropdown::-webkit-scrollbar,
+    .dropdown-menu::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .autocomplete-dropdown::-webkit-scrollbar-track,
+    .dropdown-menu::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .autocomplete-dropdown::-webkit-scrollbar-thumb,
+    .dropdown-menu::-webkit-scrollbar-thumb {
+      background: rgba(55, 65, 81, 0.5);
+      border-radius: 3px;
+    }
+
+    .autocomplete-dropdown::-webkit-scrollbar-thumb:hover,
+    .dropdown-menu::-webkit-scrollbar-thumb:hover {
+      background: rgba(55, 65, 81, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">PS</div>
+      Phantom Stocks
+    </div>
+    <nav class="nav">
+      <a href="portfolio.html" class="nav-link">Portfolio</a>
+      <a href="trading.html" class="nav-link active">Trading</a>
+      <a href="courses.html" class="nav-link">Learn</a>
+    </nav>
+    <div class="user-section">
+      <span class="cash-display" id="cashDisplay">$0.00</span>
+      <span class="username" id="username">Loading...</span>
+      <button class="logout-btn" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <!-- Timeframe Selector -->
+    <div class="timeframe-selector">
+      <button class="timeframe-btn" data-timeframe="1m">1m</button>
+      <button class="timeframe-btn" data-timeframe="5m">5m</button>
+      <button class="timeframe-btn active" data-timeframe="15m">15m</button>
+      <button class="timeframe-btn" data-timeframe="30m">30m</button>
+      <button class="timeframe-btn" data-timeframe="1h">1h</button>
+      <button class="timeframe-btn" data-timeframe="1d">1d</button>
+    </div>
+
+    <!-- Search -->
+    <div class="search-container">
+      <input 
+        type="text" 
+        class="search-input" 
+        id="searchInput" 
+        placeholder="AAPL"
+      >
+      <div class="autocomplete-dropdown" id="autocompleteDropdown">
+        <!-- Populated by JavaScript -->
+      </div>
+    </div>
+
+    <!-- Chart Type Dropdown -->
+    <div class="dropdown-container">
+      <button class="dropdown-btn" id="chartTypeBtn">
+        <span id="chartTypeLabel">Chart Type: Candlestick</span>
+        <span class="dropdown-arrow">▼</span>
+      </button>
+      <div class="dropdown-menu" id="chartTypeMenu">
+        <div class="dropdown-item active" data-chart-type="candlestick">Candlestick</div>
+        <div class="dropdown-item" data-chart-type="bars">Bars</div>
+        <div class="dropdown-item" data-chart-type="line">Line</div>
+        <div class="dropdown-item" data-chart-type="baseline">Baseline</div>
+      </div>
+    </div>
+
+    <!-- Indicators Dropdown -->
+    <div class="dropdown-container">
+      <button class="dropdown-btn" id="indicatorsBtn">
+        <span>Indicators</span>
+        <span class="dropdown-arrow">▼</span>
+      </button>
+      <div class="dropdown-menu" id="indicatorsMenu">
+        <div class="indicator-item" data-indicator="volume">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">Volume</div>
+        </div>
+        <div class="indicator-item" data-indicator="sma">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">SMA</div>
+        </div>
+        <div class="indicator-item" data-indicator="ema">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">EMA</div>
+        </div>
+        <div class="indicator-item" data-indicator="bollinger">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">Bollinger Bands</div>
+        </div>
+        <div class="indicator-item" data-indicator="rsi">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">RSI</div>
+        </div>
+        <div class="indicator-item" data-indicator="macd">
+          <div class="indicator-checkbox"></div>
+          <div class="indicator-label">MACD</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div style="text-align: center;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading chart data...</div>
+      </div>
+    </div>
+
+    <!-- Chart Container -->
+    <div id="chart-container"></div>
+
+    <!-- Buy/Sell Card -->
+    <div class="trade-card" id="tradeCard">
+      <div class="trade-card-header">
+        <div class="stock-symbol" id="tradeSymbol">AAPL</div>
+        <div class="stock-name" id="tradeName">Apple Inc.</div>
+        <div class="stock-price" id="tradePrice">$0.00</div>
+        <div class="stock-change positive" id="tradeChange">+$0.00 (0.00%)</div>
+      </div>
+
+      <div class="trade-divider"></div>
+
+      <div class="stock-details">
+        <div class="detail-label">Open</div>
+        <div class="detail-value" id="tradeOpen">$0.00</div>
+        <div class="detail-label">High</div>
+        <div class="detail-value" id="tradeHigh">$0.00</div>
+        <div class="detail-label">Low</div>
+        <div class="detail-value" id="tradeLow">$0.00</div>
+        <div class="detail-label">Close</div>
+        <div class="detail-value" id="tradeClose">$0.00</div>
+      </div>
+
+      <div class="trade-divider"></div>
+
+      <div class="form-group">
+        <label class="form-label">Quantity</label>
+        <input 
+          type="number" 
+          class="form-input" 
+          id="quantityInput" 
+          placeholder="0"
+          step="1"
+          min="0"
+        >
+        <div class="total-display">
+          Total: <span class="total-amount" id="totalAmount">$0.00</span>
+        </div>
+      </div>
+
+      <div class="trade-buttons">
+        <button class="trade-btn buy-btn" id="buyBtn">BUY</button>
+        <button class="trade-btn sell-btn" id="sellBtn">SELL</button>
+      </div>
+
+      <div class="error-message" id="tradeError"></div>
+      <div class="success-message" id="tradeSuccess"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/pages/trading.js"></script>
+</body>
+</html>
