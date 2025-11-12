@@ -22,7 +22,7 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 // Test connection
 supabase
-    .from('profiles')
+    .from('user_profiles')
     .select('count')
     .limit(1)
     .then(() => {

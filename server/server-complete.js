@@ -92,7 +92,7 @@ cron.schedule('*/30 * * * *', async () => {
         
         // Get all users
         const { data: profiles, error: profilesError } = await supabase
-            .from('profiles')
+            .from('user_profiles')
             .select('user_id');
         
         if (profilesError) {
