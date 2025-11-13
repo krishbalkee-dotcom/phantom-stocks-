@@ -10,7 +10,7 @@ const API_BASE = 'https://phantom-stocks.onrender.com/api';
  */
 export async function getPortfolioSummary(userId) {
   try {
-    const response = await fetch(`${API_BASE}/portfolio/summary?userId=${userId}`);
+    const response = await fetch(`${API_BASE}/portfolio/summary?user_id=${userId}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch portfolio summary');
@@ -28,7 +28,7 @@ export async function getPortfolioSummary(userId) {
  */
 export async function getHoldings(userId) {
   try {
-    const response = await fetch(`${API_BASE}/portfolio/holdings?userId=${userId}`);
+    const response = await fetch(`${API_BASE}/portfolio/holdings?user_id=${userId}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch holdings');
@@ -44,11 +44,11 @@ export async function getHoldings(userId) {
 /**
  * Get portfolio snapshots for performance chart
  * @param {string} userId - User ID
- * @param {string} timeframe - '1D', '1W', '1M', 'ALL'
+ * @param {string} timeframe - '1D', '1W', '1M', '3M', '1Y'
  */
 export async function getPortfolioSnapshots(userId, timeframe = '1W') {
   try {
-    const response = await fetch(`${API_BASE}/portfolio/snapshots?userId=${userId}&timeframe=${timeframe}`);
+    const response = await fetch(`${API_BASE}/portfolio/snapshots?user_id=${userId}&period=${timeframe}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch portfolio snapshots');
@@ -68,7 +68,7 @@ export async function getPortfolioSnapshots(userId, timeframe = '1W') {
  */
 export async function getTransactions(userId, limit = 10) {
   try {
-    const response = await fetch(`${API_BASE}/portfolio/transactions?userId=${userId}&limit=${limit}`);
+    const response = await fetch(`${API_BASE}/portfolio/transactions?user_id=${userId}&limit=${limit}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch transactions');
@@ -90,13 +90,17 @@ export function calculateAssetAllocation(holdings) {
     return [];
   }
   
-  const totalValue = holdings.reduce((sum, h) => sum + h.currentValue, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + (h.current_value || 0), 0);
+  
+  if (totalValue === 0) {
+    return [];
+  }
   
   return holdings.map(holding => ({
     symbol: holding.symbol,
-    name: holding.name,
-    value: holding.currentValue,
-    percentage: ((holding.currentValue / totalValue) * 100).toFixed(2),
+    name: holding.name || holding.symbol,
+    value: holding.current_value || 0,
+    percentage: (((holding.current_value || 0) / totalValue) * 100).toFixed(2),
     quantity: holding.quantity
   })).sort((a, b) => b.value - a.value); // Sort by value descending
 }

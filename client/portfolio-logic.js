@@ -5,7 +5,8 @@ import {
     getPortfolioSummary, 
     getHoldings, 
     getTransactions,
-    getPortfolioSnapshots 
+    getPortfolioSnapshots,
+    calculateAssetAllocation
 } from './src/services/portfolioService.js';
 import { getMarketNews } from './src/services/newsService.js';
 
@@ -49,7 +50,7 @@ async function loadPortfolioData() {
         const [summary, holdings, transactions, snapshots] = await Promise.all([
             getPortfolioSummary(currentUser.id),
             getHoldings(currentUser.id),
-            getTransactions(currentUser.id),
+            getTransactions(currentUser.id, 50),
             getPortfolioSnapshots(currentUser.id, currentPeriod)
         ]);
         
@@ -70,8 +71,11 @@ function updateUserInfo() {
     const username = user_metadata?.username || currentUser.email.split('@')[0];
     const firstName = username.split(' ')[0];
     
-    // Update greeting
-    const hour = new Date().getHours();
+    // Update greeting with Eastern timezone
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const hour = etTime.getHours();
+    
     let greeting = 'Good Morning';
     if (hour >= 12 && hour < 17) greeting = 'Good Afternoon';
     if (hour >= 17) greeting = 'Good Evening';
@@ -151,9 +155,9 @@ function updateTransactionsList() {
                     <div class="transaction-action ${tx.action.toLowerCase()}">${tx.action}</div>
                     <div>${tx.quantity} shares</div>
                     <div>$${parseFloat(tx.price).toFixed(2)}</div>
-                    <div>$${parseFloat(tx.total_amount).toFixed(2)}</div>
+                    <div>$${parseFloat(tx.total_amount || tx.total_value).toFixed(2)}</div>
                     <div style="font-size: 0.7rem; color: #9ca3af;">
-                        ${new Date(tx.created_at).toLocaleDateString()}
+                        ${new Date(tx.created_at || tx.executed_at).toLocaleDateString()}
                     </div>
                 </div>
             `).join('')}
@@ -161,7 +165,7 @@ function updateTransactionsList() {
     `;
 }
 
-// Render performance chart
+// Render performance chart (SVG-based)
 function renderPerformanceChart() {
     const svg = document.getElementById('chartSvg');
     const width = 800;
@@ -193,7 +197,7 @@ function renderPerformanceChart() {
     // Calculate scales
     const xMin = Math.min(...data.map(d => d.time));
     const xMax = Math.max(...data.map(d => d.time));
-    const yMin = Math.min(...data.map(d => d.value)) * 0.99; // Add 1% padding
+    const yMin = Math.min(...data.map(d => d.value)) * 0.99;
     const yMax = Math.max(...data.map(d => d.value)) * 1.01;
     
     const xScale = (time) => {
@@ -216,170 +220,137 @@ function renderPerformanceChart() {
         line.setAttribute('stroke', 'rgba(55, 65, 81, 0.3)');
         line.setAttribute('stroke-width', '1');
         svg.appendChild(line);
-        
-        // Y-axis labels
-        const value = yMax - (i / gridLines) * (yMax - yMin);
-        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('x', padding.left - 10);
-        label.setAttribute('y', y + 4);
-        label.setAttribute('text-anchor', 'end');
-        label.setAttribute('fill', '#9ca3af');
-        label.setAttribute('font-size', '10');
-        label.textContent = `$${value.toFixed(0)}`;
-        svg.appendChild(label);
     }
     
-    // Draw line
+    // Draw chart line
     const pathData = data.map((d, i) => {
         const x = xScale(d.time);
         const y = yScale(d.value);
-        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+        return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
     }).join(' ');
     
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathData);
-    path.setAttribute('class', 'chart-line portfolio');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#ef4444');
+    path.setAttribute('stroke-width', '2');
     svg.appendChild(path);
-    
-    // Draw data points
-    data.forEach(d => {
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', xScale(d.time));
-        circle.setAttribute('cy', yScale(d.value));
-        circle.setAttribute('r', '3');
-        circle.setAttribute('fill', '#ef4444');
-        svg.appendChild(circle);
-    });
 }
 
-// Render asset allocation donut chart
+// Render asset allocation donut chart using Chart.js
 function renderAssetAllocationChart() {
     const canvas = document.getElementById('assetAllocationChart');
-    const ctx = canvas.getContext('2d');
+    const legendContainer = document.getElementById('assetAllocationLegend');
     
     // Destroy existing chart
     if (assetAllocationChart) {
         assetAllocationChart.destroy();
     }
     
-    // Calculate allocation
-    const totalValue = portfolioData?.total_value || 10000;
-    const cash = portfolioData?.cash || 10000;
-    
-    const labels = ['Cash'];
-    const values = [cash];
-    const colors = ['#6b7280'];
-    
-    // Add holdings
-    if (holdingsData && holdingsData.length > 0) {
-        holdingsData.forEach(holding => {
-            labels.push(holding.symbol);
-            values.push(holding.current_value);
-            colors.push(getColorForSymbol(holding.symbol));
+    // Check if holdings exist
+    if (!holdingsData || holdingsData.length === 0) {
+        // Show empty state
+        const ctx = canvas.getContext('2d');
+        assetAllocationChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['No Holdings'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: ['rgba(156, 163, 175, 0.2)'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
         });
+        
+        legendContainer.innerHTML = '<div style="color: #6b7280; text-align: center;">Start trading to see allocation</div>';
+        return;
     }
     
-    // Create chart
+    // Calculate asset allocation
+    const allocation = calculateAssetAllocation(holdingsData);
+    
+    // Generate colors
+    const colors = [
+        '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
+        '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#a855f7'
+    ];
+    
+    const ctx = canvas.getContext('2d');
+    
     assetAllocationChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: labels,
+            labels: allocation.map(a => a.symbol),
             datasets: [{
-                data: values,
-                backgroundColor: colors,
-                borderColor: '#000000',
-                borderWidth: 2
+                data: allocation.map(a => a.value),
+                backgroundColor: colors.slice(0, allocation.length),
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
-                legend: {
-                    display: false
-                },
+                legend: { display: false },
                 tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
                     callbacks: {
                         label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const percentage = ((value / totalValue) * 100).toFixed(1);
-                            return `${label}: $${value.toLocaleString()} (${percentage}%)`;
+                            const item = allocation[context.dataIndex];
+                            return [
+                                `${item.symbol}: $${item.value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+                                `${item.percentage}% of portfolio`
+                            ];
                         }
                     }
                 }
-            },
-            cutout: '70%'
+            }
         }
     });
     
     // Render legend
-    renderAllocationLegend(labels, values, colors, totalValue);
-}
-
-// Render allocation legend
-function renderAllocationLegend(labels, values, colors, totalValue) {
-    const legendContainer = document.getElementById('assetAllocationLegend');
-    
-    legendContainer.innerHTML = labels.map((label, index) => {
-        const value = values[index];
-        const percentage = ((value / totalValue) * 100).toFixed(1);
-        return `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <div style="width: 12px; height: 12px; background: ${colors[index]}; border-radius: 2px;"></div>
-                    <span>${label}</span>
-                </div>
-                <span style="color: #9ca3af;">${percentage}%</span>
+    let legendHTML = '';
+    allocation.forEach((item, index) => {
+        legendHTML += `
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <div style="width: 12px; height: 12px; background-color: ${colors[index]}; border-radius: 2px;"></div>
+                <span style="color: #d1d5db;">${item.symbol} (${item.percentage}%)</span>
             </div>
         `;
-    }).join('');
-}
-
-// Get color for stock symbol
-function getColorForSymbol(symbol) {
-    const colors = [
-        '#a855f7', '#f97316', '#06b6d4', '#22c55e', 
-        '#ef4444', '#eab308', '#ec4899', '#8b5cf6'
-    ];
-    const index = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[index % colors.length];
-}
-
-// Change time period
-async function changePeriod(period) {
-    currentPeriod = period;
-    
-    // Update active button
-    document.querySelectorAll('.time-period').forEach(btn => {
-        if (btn.dataset.period === period) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
     });
     
-    // Reload snapshots
-    try {
-        snapshotsData = await getPortfolioSnapshots(currentUser.id, period);
-        renderPerformanceChart();
-    } catch (error) {
-        console.error('Error loading snapshots:', error);
-    }
+    legendContainer.innerHTML = legendHTML;
 }
 
 // Setup event listeners
 function setupEventListeners() {
     // Time period buttons
     document.querySelectorAll('.time-period').forEach(btn => {
-        btn.addEventListener('click', () => changePeriod(btn.dataset.period));
+        btn.addEventListener('click', async () => {
+            document.querySelectorAll('.time-period').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            currentPeriod = btn.dataset.period;
+            snapshotsData = await getPortfolioSnapshots(currentUser.id, currentPeriod);
+            renderPerformanceChart();
+        });
     });
-    
-    // Avatar - open account settings
-    document.getElementById('userAvatar').addEventListener('click', openAccountSettings);
     
     // News button
     document.getElementById('newsBtn').addEventListener('click', openNewsModal);
+    
+    // User avatar click - open account settings
+    document.getElementById('userAvatar').addEventListener('click', openAccountSettings);
     
     // Portfolio summary button
     document.getElementById('portfolioSummaryBtn').addEventListener('click', openPortfolioSummary);
@@ -423,7 +394,7 @@ async function openNewsModal() {
     modal.classList.add('show');
     
     try {
-        const news = await getMarketNews();
+        const news = await getMarketNews(20);
         
         if (news.length === 0) {
             newsList.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 2rem;">No news available</p>';
@@ -434,10 +405,10 @@ async function openNewsModal() {
             <div class="news-item" onclick="window.open('${article.url}', '_blank')">
                 <div class="news-title">${article.title}</div>
                 <div class="news-meta">
-                    <span>${article.source || 'Market News'}</span>
+                    <span>${article.source || article.publisher?.name || 'Market News'}</span>
                     <span>${new Date(article.published_at).toLocaleDateString()}</span>
                 </div>
-                <div class="news-caption">${article.description || ''}</div>
+                <div class="news-caption">${article.description || article.summary || ''}</div>
             </div>
         `).join('');
         

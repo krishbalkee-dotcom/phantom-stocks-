@@ -13,7 +13,7 @@ const API_BASE = 'https://phantom-stocks.onrender.com/api';
  * @param {number} quantity - Number of shares (can be fractional)
  * @returns {Promise<Object>} Trade result with updated portfolio
  */
-export async function executeTrade(userId, symbol, type, quantity) {
+export async function executeTrade(userId, symbol, type, quantity, price) {
   try {
     const response = await fetch(`${API_BASE}/trades/execute`, {
       method: 'POST',
@@ -21,10 +21,11 @@ export async function executeTrade(userId, symbol, type, quantity) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        userId,
+        user_id: userId,
         symbol: symbol.toUpperCase(),
-        type,
-        quantity: parseFloat(quantity)
+        action: type,
+        quantity: parseFloat(quantity),
+        price: parseFloat(price)
       })
     });
     
@@ -34,7 +35,7 @@ export async function executeTrade(userId, symbol, type, quantity) {
       throw new Error(data.error || 'Trade execution failed');
     }
     
-    console.log(`[TradingService] ${type} ${quantity} ${symbol} @ $${data.price}`);
+    console.log(`[TradingService] ${type} ${quantity} ${symbol} @ $${price}`);
     
     return data;
     
@@ -81,7 +82,7 @@ export async function searchStocks(query) {
       return [];
     }
     
-    const response = await fetch(`${API_BASE}/trades/search?query=${encodeURIComponent(query)}`);
+    const response = await fetch(`${API_BASE}/trades/search?q=${encodeURIComponent(query)}`);
     
     if (!response.ok) {
       throw new Error('Search failed');
