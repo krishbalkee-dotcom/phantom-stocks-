@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
+import fetch from 'node-fetch';
 
 // Load environment variables
 dotenv.config();
@@ -12,21 +13,24 @@ import portfolioRoutes from './routes/portfolio.js';
 import tradesRoutes from './routes/trades.js';
 import marketDataRoutes from './routes/market-data.js';
 import newsRoutes from './routes/news.js';
+import coursesRoutes from './routes/courses.js';
 
 // Import services
 import { supabase } from './config/supabase.js';
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 3000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const PORT = process.env.PORT || 10000;
+const NODE_ENV = process.env.NODE_ENV || 'production';
 
-// CORS Configuration - FIXED
+// CORS Configuration - FIXED with Netlify domain
 const allowedOrigins = [
+    'https://phantomstockspapertrading.netlify.app',
     'https://phantomstockspapertrading.com',
     'https://www.phantomstockspapertrading.com',
     'http://localhost:3000',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'http://127.0.0.1:5500'
 ];
 
 // If ALLOWED_ORIGINS env var is set, add those too
@@ -42,6 +46,7 @@ app.use(cors({
         if (allowedOrigins.indexOf(origin) !== -1 || NODE_ENV === 'development') {
             callback(null, true);
         } else {
+            console.error(`CORS blocked origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -72,6 +77,7 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/trades', tradesRoutes);
 app.use('/api/market-data', marketDataRoutes);
 app.use('/api/news', newsRoutes);
+app.use('/api/courses', coursesRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -83,7 +89,8 @@ app.get('/', (req, res) => {
             portfolio: '/api/portfolio/*',
             trades: '/api/trades/*',
             marketData: '/api/market-data/*',
-            news: '/api/news'
+            news: '/api/news',
+            courses: '/api/courses/*'
         }
     });
 });
@@ -106,6 +113,34 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Helper function to fetch current prices from Polygon
+async function fetchCurrentPrices(symbols) {
+    if (!symbols || symbols.length === 0) return {};
+    
+    const prices = {};
+    const POLYGON_KEY = process.env.POLYGON_API_KEY;
+    
+    const promises = symbols.map(async (symbol) => {
+        try {
+            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+                prices[symbol] = parseFloat(data.results[0].c);
+            }
+        } catch (error) {
+            console.error(`Error fetching price for ${symbol}:`, error);
+        }
+    });
+    
+    await Promise.all(promises);
+    return prices;
+}
+
 // Cron job: Create portfolio snapshots every 30 minutes
 cron.schedule('*/30 * * * *', async () => {
     try {
@@ -121,10 +156,18 @@ cron.schedule('*/30 * * * *', async () => {
             return;
         }
         
+        // Fetch current prices from Polygon for all symbols
+        const { data: allHoldings } = await supabase
+            .from('holdings')
+            .select('symbol');
+        
+        const uniqueSymbols = [...new Set(allHoldings?.map(h => h.symbol) || [])];
+        const prices = await fetchCurrentPrices(uniqueSymbols);
+        
         // Create snapshot for each user
         for (const profile of profiles) {
             try {
-                // Get portfolio from user_profiles (cash_balance)
+                // Get user profile (cash_balance)
                 const { data: userProfile, error: profileError } = await supabase
                     .from('user_profiles')
                     .select('cash_balance')
@@ -134,17 +177,23 @@ cron.schedule('*/30 * * * *', async () => {
                 if (profileError) continue;
                 
                 // Get holdings
-                const { data: holdings, error: holdingsError } = await supabase
+                const { data: holdings, error: holdingsError} = await supabase
                     .from('holdings')
-                    .select('quantity, avg_purchase_price')
+                    .select('symbol, quantity')
                     .eq('user_id', profile.user_id);
                 
                 if (holdingsError) continue;
                 
-                // Calculate total holdings value (using average purchase price as approximation)
-                const holdingsValue = holdings?.reduce((sum, h) => {
-                    return sum + (h.quantity * h.avg_purchase_price);
-                }, 0) || 0;
+                // Calculate total holdings value using current prices
+                let holdingsValue = 0;
+                if (holdings && holdings.length > 0) {
+                    holdings.forEach(holding => {
+                        const currentPrice = prices[holding.symbol];
+                        if (currentPrice) {
+                            holdingsValue += holding.quantity * currentPrice;
+                        }
+                    });
+                }
                 
                 const totalValue = userProfile.cash_balance + holdingsValue;
                 
@@ -186,6 +235,7 @@ app.listen(PORT, () => {
 ║  • POST /api/trades/execute            ║
 ║  • GET  /api/market-data/*             ║
 ║  • GET  /api/news                      ║
+║  • GET  /api/courses/*                 ║
 ╠═══════════════════════════════════════╣
 ║  Cron Jobs:                            ║
 ║  • Portfolio snapshots: Every 30 min   ║

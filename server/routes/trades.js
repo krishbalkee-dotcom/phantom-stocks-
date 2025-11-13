@@ -1,5 +1,6 @@
 // Trades Routes - Execute trades and search stocks
 import express from 'express';
+import fetch from 'node-fetch';
 import { supabase } from '../config/supabase.js';
 import polygonService from '../services/polygonService.js';
 import cacheService from '../services/cacheService.js';
@@ -27,15 +28,15 @@ router.post('/execute', async (req, res) => {
             return res.status(400).json({ error: 'Quantity must be greater than 0' });
         }
         
-        // Get user's portfolio
-        const { data: portfolio, error: portfolioError } = await supabase
-            .from('portfolios')
-            .select('*')
+        // Get user's profile (cash_balance)
+        const { data: userProfile, error: profileError } = await supabase
+            .from('user_profiles')
+            .select('cash_balance')
             .eq('user_id', user_id)
             .single();
         
-        if (portfolioError) {
-            return res.status(404).json({ error: 'Portfolio not found' });
+        if (profileError || !userProfile) {
+            return res.status(404).json({ error: 'User profile not found' });
         }
         
         const totalAmount = quantity * price;
@@ -43,7 +44,7 @@ router.post('/execute', async (req, res) => {
         // Handle BUY action
         if (action === 'BUY') {
             // Check if user has enough cash
-            if (portfolio.cash < totalAmount) {
+            if (userProfile.cash_balance < totalAmount) {
                 return res.status(400).json({ error: 'Insufficient funds' });
             }
             
@@ -53,46 +54,62 @@ router.post('/execute', async (req, res) => {
                 .select('*')
                 .eq('user_id', user_id)
                 .eq('symbol', symbol)
-                .single();
+                .maybeSingle();
             
             if (existingHolding) {
                 // Update existing holding
-                const newQuantity = existingHolding.quantity + quantity;
-                const newTotalCost = (existingHolding.average_cost * existingHolding.quantity) + totalAmount;
-                const newAverageCost = newTotalCost / newQuantity;
+                const newQuantity = parseFloat(existingHolding.quantity) + parseFloat(quantity);
+                const newTotalCost = (parseFloat(existingHolding.avg_purchase_price) * parseFloat(existingHolding.quantity)) + totalAmount;
+                const newAvgPrice = newTotalCost / newQuantity;
+                const newCurrentValue = newQuantity * price;
                 
-                await supabase
+                const { error: updateError } = await supabase
                     .from('holdings')
                     .update({
                         quantity: newQuantity,
-                        average_cost: newAverageCost,
+                        avg_purchase_price: newAvgPrice,
                         current_price: price,
-                        current_value: newQuantity * price,
+                        current_value: newCurrentValue,
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', existingHolding.id);
+                
+                if (updateError) {
+                    console.error('Error updating holding:', updateError);
+                    return res.status(500).json({ error: 'Failed to update holding' });
+                }
             } else {
                 // Create new holding
-                await supabase
+                const { error: insertError } = await supabase
                     .from('holdings')
                     .insert({
                         user_id,
                         symbol,
                         quantity,
-                        average_cost: price,
+                        avg_purchase_price: price,
                         current_price: price,
                         current_value: totalAmount
                     });
+                
+                if (insertError) {
+                    console.error('Error creating holding:', insertError);
+                    return res.status(500).json({ error: 'Failed to create holding' });
+                }
             }
             
-            // Update portfolio cash
-            await supabase
-                .from('portfolios')
+            // Update user cash balance
+            const { error: cashUpdateError } = await supabase
+                .from('user_profiles')
                 .update({
-                    cash: portfolio.cash - totalAmount,
-                    updated_at: new Date().toISOString()
+                    cash_balance: parseFloat(userProfile.cash_balance) - totalAmount,
+                    last_active: new Date().toISOString()
                 })
                 .eq('user_id', user_id);
+            
+            if (cashUpdateError) {
+                console.error('Error updating cash balance:', cashUpdateError);
+                return res.status(500).json({ error: 'Failed to update cash balance' });
+            }
         }
         
         // Handle SELL action
@@ -109,40 +126,65 @@ router.post('/execute', async (req, res) => {
                 return res.status(400).json({ error: 'You do not own this stock' });
             }
             
-            if (holding.quantity < quantity) {
+            if (parseFloat(holding.quantity) < parseFloat(quantity)) {
                 return res.status(400).json({ error: 'Insufficient shares' });
             }
             
             // Update or delete holding
-            if (holding.quantity === quantity) {
+            if (parseFloat(holding.quantity) === parseFloat(quantity)) {
                 // Delete holding (selling all shares)
-                await supabase
+                const { error: deleteError } = await supabase
                     .from('holdings')
                     .delete()
                     .eq('id', holding.id);
+                
+                if (deleteError) {
+                    console.error('Error deleting holding:', deleteError);
+                    return res.status(500).json({ error: 'Failed to delete holding' });
+                }
             } else {
                 // Update holding (selling partial shares)
-                const newQuantity = holding.quantity - quantity;
+                const newQuantity = parseFloat(holding.quantity) - parseFloat(quantity);
+                const newCurrentValue = newQuantity * price;
                 
-                await supabase
+                const { error: updateError } = await supabase
                     .from('holdings')
                     .update({
                         quantity: newQuantity,
                         current_price: price,
-                        current_value: newQuantity * price,
+                        current_value: newCurrentValue,
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', holding.id);
+                
+                if (updateError) {
+                    console.error('Error updating holding:', updateError);
+                    return res.status(500).json({ error: 'Failed to update holding' });
+                }
             }
             
-            // Update portfolio cash
-            await supabase
-                .from('portfolios')
+            // Update user cash balance
+            const { error: cashUpdateError } = await supabase
+                .from('user_profiles')
                 .update({
-                    cash: portfolio.cash + totalAmount,
-                    updated_at: new Date().toISOString()
+                    cash_balance: parseFloat(userProfile.cash_balance) + totalAmount,
+                    last_active: new Date().toISOString()
                 })
                 .eq('user_id', user_id);
+            
+            if (cashUpdateError) {
+                console.error('Error updating cash balance:', cashUpdateError);
+                return res.status(500).json({ error: 'Failed to update cash balance' });
+            }
+        }
+        
+        // Get company name from Polygon (optional, for better UX)
+        let companyName = symbol;
+        try {
+            const details = await polygonService.getTickerDetails(symbol);
+            companyName = details.name || symbol;
+        } catch (e) {
+            console.warn('Could not fetch company name:', e.message);
         }
         
         // Record transaction
@@ -151,15 +193,17 @@ router.post('/execute', async (req, res) => {
             .insert({
                 user_id,
                 symbol,
-                action,
+                company_name: companyName,
+                type: action, // Use 'type' column, not 'action'
                 quantity,
                 price,
-                total_amount: totalAmount
+                total_value: totalAmount
             })
             .select()
             .single();
         
         if (transactionError) {
+            console.error('Error recording transaction:', transactionError);
             return res.status(500).json({ error: 'Failed to record transaction' });
         }
         
@@ -203,6 +247,51 @@ router.get('/search', async (req, res) => {
         
     } catch (error) {
         console.error('Error searching tickers:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/trades/prices?symbols=AAPL,TSLA,MSFT
+ * Get current prices for multiple symbols
+ */
+router.get('/prices', async (req, res) => {
+    try {
+        const { symbols } = req.query;
+        
+        if (!symbols) {
+            return res.status(400).json({ error: 'symbols parameter required' });
+        }
+        
+        const symbolArray = symbols.split(',').map(s => s.trim().toUpperCase());
+        
+        const prices = {};
+        const POLYGON_KEY = process.env.POLYGON_API_KEY;
+        
+        // Fetch prices in parallel
+        const promises = symbolArray.map(async (symbol) => {
+            try {
+                const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                if (data.status === 'OK' && data.results && data.results.length > 0) {
+                    prices[symbol] = parseFloat(data.results[0].c);
+                }
+            } catch (error) {
+                console.error(`Error fetching price for ${symbol}:`, error);
+            }
+        });
+        
+        await Promise.all(promises);
+        
+        res.json(prices);
+        
+    } catch (error) {
+        console.error('Error fetching prices:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
