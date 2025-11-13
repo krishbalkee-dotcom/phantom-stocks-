@@ -3,11 +3,11 @@
  * Handles all database connections and authentication
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-// Get Supabase credentials from environment or config
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://wjvcnajhbxsqiznplsjl.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqdmNuYWpoYnhzcWl6bnBsc2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDMzMDYsImV4cCI6MjA3ODQ3OTMwNn0.VPvbWdXQtx4UQfn8p9DOnfSkyKX5QM7ytm1ZacWD1DE';
+// Supabase credentials (hardcoded for browser use - these are safe to expose)
+const SUPABASE_URL = 'https://wjvcnajhbxsqiznplsjl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqdmNuYWpoYnhzcWl6bnBsc2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDMzMDYsImV4cCI6MjA3ODQ3OTMwNn0.VPvbWdXQtx4UQfn8p9DOnfSkyKX5QM7ytm1ZacWD1DE';
 
 // Create Supabase client
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
