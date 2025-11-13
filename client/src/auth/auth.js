@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabaseClient.js';
+import { redirectToIntendedPage } from './authGuard.js';
 
 /**
  * Sign up new user
@@ -12,6 +13,21 @@ import { supabase } from './supabaseClient.js';
 export async function signUp(email, password, username) {
   try {
     console.log('[Auth] Signing up user:', email);
+    
+    // Validate inputs
+    if (!email || !password || !username) {
+      throw new Error('All fields are required');
+    }
+    
+    if (password.length < 6) {
+      throw new Error('Password must be at least 6 characters');
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Please enter a valid email address');
+    }
     
     // Create auth user
     const { data, error } = await supabase.auth.signUp({
@@ -26,26 +42,21 @@ export async function signUp(email, password, username) {
     
     if (error) {
       console.error('[Auth] Signup error:', error);
-      return { success: false, error: error.message };
+      throw new Error(error.message);
     }
     
     if (!data.user) {
-      return { success: false, error: 'Failed to create user' };
+      throw new Error('Failed to create user');
     }
     
     console.log('[Auth] User created successfully:', data.user.id);
     
-    // User profile is auto-created by database trigger with $10,000
-    
-    return {
-      success: true,
-      user: data.user,
-      message: 'Account created! You can now log in.'
-    };
+    // Redirect to portfolio
+    window.location.href = '/portfolio.html';
     
   } catch (error) {
     console.error('[Auth] Signup exception:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
@@ -56,6 +67,11 @@ export async function login(email, password) {
   try {
     console.log('[Auth] Logging in user:', email);
     
+    // Validate inputs
+    if (!email || !password) {
+      throw new Error('Email and password are required');
+    }
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password
@@ -63,24 +79,25 @@ export async function login(email, password) {
     
     if (error) {
       console.error('[Auth] Login error:', error);
-      return { success: false, error: error.message };
+      // Make error messages more user-friendly
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password');
+      }
+      throw new Error(error.message);
     }
     
     if (!data.session) {
-      return { success: false, error: 'Failed to create session' };
+      throw new Error('Failed to create session');
     }
     
     console.log('[Auth] Login successful');
     
-    return {
-      success: true,
-      user: data.user,
-      session: data.session
-    };
+    // Redirect to portfolio or intended page
+    redirectToIntendedPage();
     
   } catch (error) {
     console.error('[Auth] Login exception:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
@@ -95,16 +112,15 @@ export async function logout() {
     
     if (error) {
       console.error('[Auth] Logout error:', error);
-      return { success: false, error: error.message };
+      throw new Error(error.message);
     }
     
     console.log('[Auth] Logout successful');
-    
-    return { success: true };
+    window.location.href = '/index.html';
     
   } catch (error) {
     console.error('[Auth] Logout exception:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
@@ -121,19 +137,15 @@ export async function requestPasswordReset(email) {
     
     if (error) {
       console.error('[Auth] Password reset error:', error);
-      return { success: false, error: error.message };
+      throw new Error(error.message);
     }
     
     console.log('[Auth] Password reset email sent');
-    
-    return {
-      success: true,
-      message: 'Password reset email sent! Check your inbox.'
-    };
+    return 'Password reset email sent! Check your inbox.';
     
   } catch (error) {
     console.error('[Auth] Password reset exception:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
@@ -150,19 +162,15 @@ export async function updatePassword(newPassword) {
     
     if (error) {
       console.error('[Auth] Password update error:', error);
-      return { success: false, error: error.message };
+      throw new Error(error.message);
     }
     
     console.log('[Auth] Password updated successfully');
-    
-    return {
-      success: true,
-      message: 'Password updated successfully!'
-    };
+    return 'Password updated successfully!';
     
   } catch (error) {
     console.error('[Auth] Password update exception:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
