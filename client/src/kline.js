@@ -87,7 +87,7 @@ export async function loadChartData(symbol, timeframe) {
     console.log(`[Kline] Loading ${symbol} ${timeframe}...`);
     
     // Fetch from your backend API (instant 1000 bars)
-    const response = await fetch(`http://localhost:3001/api/candles/${symbol}/${timeframe}`);
+    const response = await fetch(`https://phantom-stocks.onrender.com/api/candles/${symbol}/${timeframe}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch chart data');

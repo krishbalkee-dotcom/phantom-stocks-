@@ -3,7 +3,7 @@
  * Client-side service for portfolio data management
  */
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://phantom-stocks.onrender.com/api';
 
 /**
  * Get portfolio summary (cash, holdings value, total, P&L)

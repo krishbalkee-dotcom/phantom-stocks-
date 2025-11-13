@@ -3,7 +3,7 @@
  * Client-side service for educational course management
  */
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://phantom-stocks.onrender.com/api';
 
 // Track active page view session
 let activeSession = null;

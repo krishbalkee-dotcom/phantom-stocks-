@@ -3,7 +3,7 @@
  * Client-side service for trade execution and price fetching
  */
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://phantom-stocks.onrender.com/api';
 
 /**
  * Execute a trade (buy or sell)

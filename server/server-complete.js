@@ -21,9 +21,30 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Middleware
+// CORS Configuration - FIXED
+const allowedOrigins = [
+    'https://phantomstockspapertrading.com',
+    'https://www.phantomstockspapertrading.com',
+    'http://localhost:3000',
+    'http://localhost:5173'
+];
+
+// If ALLOWED_ORIGINS env var is set, add those too
+if (process.env.ALLOWED_ORIGINS) {
+    allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+}
+
 app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
@@ -103,26 +124,29 @@ cron.schedule('*/30 * * * *', async () => {
         // Create snapshot for each user
         for (const profile of profiles) {
             try {
-                // Get portfolio
-                const { data: portfolio, error: portfolioError } = await supabase
-                    .from('portfolios')
-                    .select('cash')
+                // Get portfolio from user_profiles (cash_balance)
+                const { data: userProfile, error: profileError } = await supabase
+                    .from('user_profiles')
+                    .select('cash_balance')
                     .eq('user_id', profile.user_id)
                     .single();
                 
-                if (portfolioError) continue;
+                if (profileError) continue;
                 
                 // Get holdings
                 const { data: holdings, error: holdingsError } = await supabase
                     .from('holdings')
-                    .select('current_value')
+                    .select('quantity, avg_purchase_price')
                     .eq('user_id', profile.user_id);
                 
                 if (holdingsError) continue;
                 
-                // Calculate total value
-                const holdingsValue = holdings?.reduce((sum, h) => sum + (h.current_value || 0), 0) || 0;
-                const totalValue = portfolio.cash + holdingsValue;
+                // Calculate total holdings value (using average purchase price as approximation)
+                const holdingsValue = holdings?.reduce((sum, h) => {
+                    return sum + (h.quantity * h.avg_purchase_price);
+                }, 0) || 0;
+                
+                const totalValue = userProfile.cash_balance + holdingsValue;
                 
                 // Create snapshot
                 await supabase
@@ -130,7 +154,7 @@ cron.schedule('*/30 * * * *', async () => {
                     .insert({
                         user_id: profile.user_id,
                         total_value: totalValue,
-                        cash: portfolio.cash,
+                        cash_balance: userProfile.cash_balance,
                         holdings_value: holdingsValue
                     });
                 
@@ -149,23 +173,23 @@ cron.schedule('*/30 * * * *', async () => {
 // Start server
 app.listen(PORT, () => {
     console.log(`
-╔════════════════════════════════════════╗
+╔═══════════════════════════════════════╗
 ║   Phantom Stocks API Server Started   ║
-╠════════════════════════════════════════╣
+╠═══════════════════════════════════════╣
 ║  Port: ${PORT.toString().padEnd(32)} ║
 ║  Environment: ${NODE_ENV.padEnd(23)} ║
 ║  Time: ${new Date().toLocaleTimeString().padEnd(27)} ║
-╠════════════════════════════════════════╣
+╠═══════════════════════════════════════╣
 ║  Endpoints:                            ║
 ║  • GET  /health                        ║
 ║  • GET  /api/portfolio/*               ║
 ║  • POST /api/trades/execute            ║
 ║  • GET  /api/market-data/*             ║
 ║  • GET  /api/news                      ║
-╠════════════════════════════════════════╣
+╠═══════════════════════════════════════╣
 ║  Cron Jobs:                            ║
 ║  • Portfolio snapshots: Every 30 min   ║
-╚════════════════════════════════════════╝
+╚═══════════════════════════════════════╝
     `);
 });
 
