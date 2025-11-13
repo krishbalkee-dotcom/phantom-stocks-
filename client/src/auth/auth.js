@@ -3,7 +3,7 @@
  * Handles user signup, login, password reset
  */
 
-import { supabase } from '../services/supabaseClient.js';
+import { supabase } from './supabaseClient.js';
 
 /**
  * Sign up new user
