@@ -86,8 +86,8 @@ export async function loadChartData(symbol, timeframe) {
   try {
     console.log(`[Kline] Loading ${symbol} ${timeframe}...`);
     
-    // Fetch from your backend API (instant 1000 bars)
-    const response = await fetch(`https://phantom-stocks.onrender.com/api/candles/${symbol}/${timeframe}`);
+    // Fetch from your backend API - FIXED to use correct route
+    const response = await fetch(`https://phantom-stocks.onrender.com/api/market-data/chart?symbol=${symbol}&timeframe=${timeframe}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch chart data');
@@ -98,9 +98,9 @@ export async function loadChartData(symbol, timeframe) {
     // Store data
     currentData = data;
     
-    // Format for Lightweight Charts
-    const candleData = data.candles.map(bar => ({
-      time: Math.floor(new Date(bar.time).getTime() / 1000),
+    // Format for Lightweight Charts - FIXED to match your backend response structure
+    const candleData = data.bars.map(bar => ({
+      time: bar.time, // Already in seconds from backend
       open: parseFloat(bar.open),
       high: parseFloat(bar.high),
       low: parseFloat(bar.low),
