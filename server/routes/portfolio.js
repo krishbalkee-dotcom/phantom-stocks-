@@ -256,6 +256,8 @@ router.get('/snapshots', async (req, res) => {
                 startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         }
         
+        console.log('[Portfolio] Querying snapshots from:', startDate.toISOString());
+        
         const { data: snapshots, error } = await supabase
             .from('portfolio_snapshots')
             .select('*')
@@ -264,14 +266,16 @@ router.get('/snapshots', async (req, res) => {
             .order('created_at', { ascending: true });
         
         if (error) {
-            return res.status(500).json({ error: 'Failed to fetch snapshots' });
+            console.error('[Portfolio] Supabase error:', error);
+            return res.status(500).json({ error: 'Failed to fetch snapshots', details: error.message });
         }
         
+        console.log('[Portfolio] Found', snapshots?.length || 0, 'snapshots');
         res.json(snapshots || []);
         
     } catch (error) {
-        console.error('Error fetching snapshots:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('[Portfolio] Exception in snapshots route:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 });
 
