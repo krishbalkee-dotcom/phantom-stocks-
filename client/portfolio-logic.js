@@ -135,13 +135,23 @@ function updatePortfolioValue() {
     const changePercent = ((change / initialValue) * 100);
     
     // Update total value
-    document.getElementById('totalPortfolioValue').textContent = `$${totalValue.toLocaleString('en-US', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-    })}`;
+    const totalValueEl = document.getElementById('totalPortfolioValue');
+    if (totalValueEl) {
+        totalValueEl.textContent = `$${totalValue.toLocaleString('en-US', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        })}`;
+    } else {
+        console.warn('Element "totalPortfolioValue" not found');
+    }
     
     // Update change display
     const changeElement = document.getElementById('portfolioChange');
+    if (!changeElement) {
+        console.warn('Element "portfolioChange" not found');
+        return;
+    }
+    
     if (Math.abs(change) < 0.01) {
         changeElement.textContent = 'No change yet';
         changeElement.className = 'profit-change';
