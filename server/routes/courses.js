@@ -72,9 +72,16 @@ router.get('/module/:id', async (req, res) => {
  */
 router.get('/progress', async (req, res) => {
   try {
+    // Debug logging
+    console.log('[Courses] /progress called');
+    console.log('[Courses] req.query:', req.query);
+    console.log('[Courses] req.query.user_id:', req.query.user_id);
+    console.log('[Courses] Full URL:', req.url);
+    
     const { user_id } = req.query;
     
     if (!user_id) {
+      console.error('[Courses] user_id is missing or undefined');
       return res.status(400).json({ error: 'user_id required' });
     }
     
@@ -315,9 +322,18 @@ router.post('/complete/:id', async (req, res) => {
 router.get('/check-unlock/:id', async (req, res) => {
   try {
     const { id: module_id } = req.params;
+    
+    // Debug logging
+    console.log('[Courses] /check-unlock called');
+    console.log('[Courses] module_id:', module_id);
+    console.log('[Courses] req.query:', req.query);
+    console.log('[Courses] req.query.user_id:', req.query.user_id);
+    console.log('[Courses] Full URL:', req.url);
+    
     const { user_id } = req.query;
     
     if (!user_id) {
+      console.error('[Courses] user_id is missing or undefined');
       return res.status(400).json({ error: 'user_id required' });
     }
     
