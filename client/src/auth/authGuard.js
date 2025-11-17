@@ -4,16 +4,17 @@
  * Redirects to login if user is not authenticated
  */
 
-import { isAuthenticated } from './auth.js';
+import { getCurrentUser } from './auth.js';
 
 /**
  * Check authentication and redirect if needed
  * Call this at the top of every protected page
+ * @returns {Promise<Object>} User object if authenticated
  */
 export async function requireAuth() {
-  const authenticated = await isAuthenticated();
+  const user = await getCurrentUser();
   
-  if (!authenticated) {
+  if (!user) {
     console.log('[AuthGuard] User not authenticated, redirecting to login');
     
     // Store the intended destination
@@ -22,10 +23,10 @@ export async function requireAuth() {
     
     // Redirect to login
     window.location.href = '/index.html';
-    return false;
+    return null;
   }
   
-  return true;
+  return user;
 }
 
 /**
