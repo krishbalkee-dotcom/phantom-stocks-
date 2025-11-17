@@ -68,21 +68,21 @@ router.get('/module/:id', async (req, res) => {
 /**
  * GET /api/courses/progress
  * Get user's course progress
- * Query params: userId
+ * Query params: user_id
  */
 router.get('/progress', async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { user_id } = req.query;
     
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id required' });
     }
     
     // Get completed modules
     const { data: completedModules, error: completedError } = await supabase
       .from('user_course_progress')
       .select('module_id, completed_at, time_spent_seconds')
-      .eq('user_id', userId)
+      .eq('user_id', user_id)
       .not('completed_at', 'is', null);
     
     if (completedError) {
@@ -93,7 +93,7 @@ router.get('/progress', async (req, res) => {
     const { data: inProgressModules, error: inProgressError } = await supabase
       .from('user_course_progress')
       .select('module_id, started_at, time_spent_seconds')
-      .eq('user_id', userId)
+      .eq('user_id', user_id)
       .is('completed_at', null);
     
     if (inProgressError) {
@@ -127,22 +127,22 @@ router.get('/progress', async (req, res) => {
 /**
  * POST /api/courses/start
  * Mark a module as started
- * Body: { userId, moduleId }
+ * Body: { user_id, module_id }
  */
 router.post('/start', async (req, res) => {
   try {
-    const { userId, moduleId } = req.body;
+    const { user_id, module_id } = req.body;
     
-    if (!userId || !moduleId) {
-      return res.status(400).json({ error: 'userId and moduleId required' });
+    if (!user_id || !module_id) {
+      return res.status(400).json({ error: 'user_id and module_id required' });
     }
     
     // Check if already exists
     const { data: existing } = await supabase
       .from('user_course_progress')
       .select('id')
-      .eq('user_id', userId)
-      .eq('module_id', moduleId)
+      .eq('user_id', user_id)
+      .eq('module_id', module_id)
       .single();
     
     if (existing) {
@@ -153,8 +153,8 @@ router.post('/start', async (req, res) => {
     const { error } = await supabase
       .from('user_course_progress')
       .insert({
-        user_id: userId,
-        module_id: moduleId
+        user_id: user_id,
+        module_id: module_id
       });
     
     if (error) {
@@ -172,22 +172,22 @@ router.post('/start', async (req, res) => {
 /**
  * POST /api/courses/ping
  * Update time spent on a module (called every 30 seconds)
- * Body: { userId, moduleId, timeSpent (seconds) }
+ * Body: { user_id, module_id, timeSpent (seconds) }
  */
 router.post('/ping', async (req, res) => {
   try {
-    const { userId, moduleId, timeSpent } = req.body;
+    const { user_id, module_id, timeSpent } = req.body;
     
-    if (!userId || !moduleId || timeSpent === undefined) {
-      return res.status(400).json({ error: 'userId, moduleId, and timeSpent required' });
+    if (!user_id || !module_id || timeSpent === undefined) {
+      return res.status(400).json({ error: 'user_id, module_id, and timeSpent required' });
     }
     
     // Update or create page view record
     const { data: existing } = await supabase
       .from('course_page_views')
       .select('id, total_time_seconds')
-      .eq('user_id', userId)
-      .eq('module_id', moduleId)
+      .eq('user_id', user_id)
+      .eq('module_id', module_id)
       .order('session_start', { ascending: false })
       .limit(1)
       .single();
@@ -206,8 +206,8 @@ router.post('/ping', async (req, res) => {
       await supabase
         .from('course_page_views')
         .insert({
-          user_id: userId,
-          module_id: moduleId,
+          user_id: user_id,
+          module_id: module_id,
           total_time_seconds: 30
         });
     }
@@ -216,8 +216,8 @@ router.post('/ping', async (req, res) => {
     await supabase
       .from('user_course_progress')
       .upsert({
-        user_id: userId,
-        module_id: moduleId,
+        user_id: user_id,
+        module_id: module_id,
         time_spent_seconds: timeSpent
       }, {
         onConflict: 'user_id,module_id'
@@ -234,23 +234,23 @@ router.post('/ping', async (req, res) => {
 /**
  * POST /api/courses/complete/:id
  * Mark a module as complete (validates 10-minute requirement)
- * Body: { userId }
+ * Body: { user_id }
  */
 router.post('/complete/:id', async (req, res) => {
   try {
-    const { id: moduleId } = req.params;
-    const { userId } = req.body;
+    const { id: module_id } = req.params;
+    const { user_id } = req.body;
     
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id required' });
     }
     
     // Check time spent
     const { data: pageView } = await supabase
       .from('course_page_views')
       .select('total_time_seconds')
-      .eq('user_id', userId)
-      .eq('module_id', moduleId)
+      .eq('user_id', user_id)
+      .eq('module_id', module_id)
       .order('session_start', { ascending: false })
       .limit(1)
       .single();
@@ -269,8 +269,8 @@ router.post('/complete/:id', async (req, res) => {
     const { data: existing } = await supabase
       .from('user_course_progress')
       .select('completed_at')
-      .eq('user_id', userId)
-      .eq('module_id', moduleId)
+      .eq('user_id', user_id)
+      .eq('module_id', module_id)
       .single();
     
     if (existing?.completed_at) {
@@ -281,8 +281,8 @@ router.post('/complete/:id', async (req, res) => {
     const { error } = await supabase
       .from('user_course_progress')
       .upsert({
-        user_id: userId,
-        module_id: moduleId,
+        user_id: user_id,
+        module_id: module_id,
         completed_at: new Date().toISOString(),
         time_spent_seconds: timeSpent
       }, {
@@ -293,7 +293,7 @@ router.post('/complete/:id', async (req, res) => {
       return res.status(500).json({ error: 'Failed to complete module' });
     }
     
-    console.log(`[Courses] User ${userId} completed module ${moduleId}`);
+    console.log(`[Courses] User ${user_id} completed module ${module_id}`);
     
     res.json({ 
       success: true, 
@@ -310,19 +310,19 @@ router.post('/complete/:id', async (req, res) => {
 /**
  * GET /api/courses/check-unlock/:id
  * Check if a module is unlocked (previous module completed)
- * Query params: userId
+ * Query params: user_id
  */
 router.get('/check-unlock/:id', async (req, res) => {
   try {
-    const { id: moduleId } = req.params;
-    const { userId } = req.query;
+    const { id: module_id } = req.params;
+    const { user_id } = req.query;
     
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id required' });
     }
     
     // Module 1 is always unlocked
-    if (parseInt(moduleId) === 1) {
+    if (parseInt(module_id) === 1) {
       return res.json({ unlocked: true });
     }
     
@@ -330,7 +330,7 @@ router.get('/check-unlock/:id', async (req, res) => {
     const { data: module } = await supabase
       .from('course_modules')
       .select('order_index')
-      .eq('id', moduleId)
+      .eq('id', module_id)
       .single();
     
     if (!module) {
@@ -351,7 +351,7 @@ router.get('/check-unlock/:id', async (req, res) => {
     const { data: progress } = await supabase
       .from('user_course_progress')
       .select('completed_at')
-      .eq('user_id', userId)
+      .eq('user_id', user_id)
       .eq('module_id', previousModule.id)
       .single();
     
