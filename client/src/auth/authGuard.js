@@ -49,9 +49,9 @@ export function redirectToIntendedPage() {
  * If so, redirect to portfolio
  */
 export async function redirectIfAuthenticated() {
-  const authenticated = await isAuthenticated();
+  const user = await getCurrentUser();
   
-  if (authenticated && window.location.pathname === '/index.html') {
+  if (user && window.location.pathname === '/index.html') {
     console.log('[AuthGuard] User already authenticated, redirecting to portfolio');
     window.location.href = '/portfolio.html';
     return true;
