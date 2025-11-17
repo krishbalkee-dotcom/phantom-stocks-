@@ -262,8 +262,8 @@ router.get('/snapshots', async (req, res) => {
             .from('portfolio_snapshots')
             .select('*')
             .eq('user_id', user_id)
-            .gte('created_at', startDate.toISOString())
-            .order('created_at', { ascending: true });
+            .gte('snapshot_at', startDate.toISOString())
+            .order('snapshot_at', { ascending: true });
         
         if (error) {
             console.error('[Portfolio] Supabase error:', error);
