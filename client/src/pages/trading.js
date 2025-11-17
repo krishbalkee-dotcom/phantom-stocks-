@@ -23,8 +23,8 @@ async function initializePage() {
         updateUserInfo();
         setupEventListeners();
         
-        // Initialize chart
-        initChart('chart');
+        // Initialize chart with correct container ID
+        initChart('chart-container');
         
         // Load initial chart
         await loadChart(currentSymbol, currentTimeframe);
