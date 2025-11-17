@@ -2,7 +2,7 @@
 import { requireAuth, logout } from '../auth/auth.js';
 import { executeTrade, searchStocks } from '../services/tradingService.js';
 import { getPortfolioSummary } from '../services/portfolioService.js';
-import KlineChart from '../kline.js';
+import { initChart, loadChartData, toggleIndicator } from '../kline.js';
 
 // Global state
 let currentUser = null;
@@ -10,8 +10,9 @@ let currentSymbol = 'AAPL';
 let currentTimeframe = '15m';
 let currentChartType = 'candlestick';
 let activeIndicators = new Set();
-let klineChart = null;
 let portfolioData = null;
+let currentPrice = 0;
+let currentHolding = 0;
 
 // Initialize page
 async function initializePage() {
@@ -20,10 +21,19 @@ async function initializePage() {
         await loadPortfolioData();
         updateUserInfo();
         setupEventListeners();
+        
+        // Initialize chart
+        initChart('chart-container');
+        
+        // Load initial chart
         await loadChart(currentSymbol, currentTimeframe);
+        
+        // Update trade card with initial symbol
+        await updateTradeCard(currentSymbol);
+        
     } catch (error) {
         console.error('Failed to initialize trading page:', error);
-        window.location.href = 'index.html';
+        window.location.href = '../index.html';
     }
 }
 
@@ -41,388 +51,294 @@ async function loadPortfolioData() {
 function updateUserInfo() {
     const { user_metadata } = currentUser;
     const username = user_metadata?.username || currentUser.email.split('@')[0];
-    document.getElementById('username').textContent = username;
+    const usernameEl = document.getElementById('username');
+    if (usernameEl) {
+        usernameEl.textContent = username;
+    }
 }
 
 // Update cash display
 function updateCashDisplay() {
     const cash = portfolioData?.cash || 0;
-    document.getElementById('cashDisplay').textContent = `$${cash.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    })}`;
+    const cashEl = document.getElementById('cashDisplay');
+    if (cashEl) {
+        cashEl.textContent = `$${cash.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+    }
 }
 
 // Load chart
 async function loadChart(symbol, timeframe) {
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    const tradeCard = document.getElementById('tradeCard');
-    
     try {
-        loadingOverlay.style.display = 'flex';
-        tradeCard.style.display = 'none';
-        
-        // Initialize or update chart
-        if (!klineChart) {
-            klineChart = new KlineChart('chart-container');
-        }
-        
-        await klineChart.loadSymbol(symbol, timeframe);
-        
-        // Apply active indicators
-        activeIndicators.forEach(indicator => {
-            klineChart.toggleIndicator(indicator, true);
-        });
-        
-        // Apply chart type
-        klineChart.setChartType(currentChartType);
-        
-        // Update trade card
-        updateTradeCard(symbol);
-        
-        tradeCard.style.display = 'block';
-        
+        console.log(`Loading chart: ${symbol} ${timeframe}`);
+        await loadChartData(symbol, timeframe);
+        console.log('Chart loaded successfully');
     } catch (error) {
         console.error('Error loading chart:', error);
         showError('Failed to load chart data');
-    } finally {
-        loadingOverlay.style.display = 'none';
     }
 }
 
-// Update trade card with stock data
-function updateTradeCard(symbol) {
-    if (!klineChart || !klineChart.currentData) return;
-    
-    const data = klineChart.currentData;
-    const latest = data[data.length - 1];
-    
-    if (!latest) return;
-    
-    document.getElementById('tradeSymbol').textContent = symbol;
-    document.getElementById('tradeName').textContent = klineChart.symbolName || symbol;
-    
-    const price = latest.close;
-    const change = latest.close - latest.open;
-    const changePercent = (change / latest.open) * 100;
-    
-    const priceElement = document.getElementById('tradePrice');
-    priceElement.textContent = `$${price.toFixed(2)}`;
-    
-    const changeElement = document.getElementById('tradeChange');
-    const sign = change >= 0 ? '+' : '';
-    changeElement.textContent = `${sign}$${change.toFixed(2)} (${sign}${changePercent.toFixed(2)}%)`;
-    changeElement.className = `stock-change ${change >= 0 ? 'positive' : 'negative'}`;
-    
-    document.getElementById('tradeOpen').textContent = `$${latest.open.toFixed(2)}`;
-    document.getElementById('tradeHigh').textContent = `$${latest.high.toFixed(2)}`;
-    document.getElementById('tradeLow').textContent = `$${latest.low.toFixed(2)}`;
-    document.getElementById('tradeClose').textContent = `$${latest.close.toFixed(2)}`;
-    
-    // Update total when quantity changes
-    updateTotal();
-}
-
-// Update total amount
-function updateTotal() {
-    const quantityInput = document.getElementById('quantityInput');
-    const quantity = parseFloat(quantityInput.value) || 0;
-    
-    if (!klineChart || !klineChart.currentData) return;
-    
-    const data = klineChart.currentData;
-    const latest = data[data.length - 1];
-    const price = latest ? latest.close : 0;
-    const total = quantity * price;
-    
-    document.getElementById('totalAmount').textContent = `$${total.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    })}`;
+// Update trade card with current symbol info
+async function updateTradeCard(symbol) {
+    try {
+        // Fetch current price from backend
+        const response = await fetch(`https://phantom-stocks.onrender.com/api/trades/prices?symbols=${symbol}`);
+        const prices = await response.json();
+        
+        currentPrice = prices[symbol] || 0;
+        
+        // Update price display
+        const priceEl = document.getElementById('currentPrice');
+        if (priceEl) {
+            priceEl.textContent = `$${currentPrice.toFixed(2)}`;
+        }
+        
+        // Update symbol display
+        const symbolEl = document.getElementById('tradeSymbol');
+        if (symbolEl) {
+            symbolEl.textContent = symbol;
+        }
+        
+        // Check if user has holding
+        const holdingsResponse = await fetch(`https://phantom-stocks.onrender.com/api/portfolio/holdings?user_id=${currentUser.id}`);
+        const holdings = await holdingsResponse.json();
+        
+        const holding = holdings.find(h => h.symbol === symbol);
+        currentHolding = holding ? parseFloat(holding.quantity) : 0;
+        
+        // Update holdings display
+        const holdingEl = document.getElementById('currentHolding');
+        if (holdingEl) {
+            holdingEl.textContent = `You own: ${currentHolding} shares`;
+        }
+        
+    } catch (error) {
+        console.error('Error updating trade card:', error);
+    }
 }
 
 // Setup event listeners
 function setupEventListeners() {
-    // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-        try {
-            await logout();
-        } catch (error) {
-            console.error('Logout error:', error);
-            window.location.href = 'index.html';
-        }
-    });
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    
+    if (searchBtn) {
+        searchBtn.addEventListener('click', handleSearch);
+    }
+    
+    if (searchInput) {
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch();
+            }
+        });
+    }
     
     // Timeframe buttons
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTimeframe = btn.dataset.timeframe;
-            loadChart(currentSymbol, currentTimeframe);
+            await loadChart(currentSymbol, currentTimeframe);
         });
     });
     
-    // Search input
-    const searchInput = document.getElementById('searchInput');
-    const autocompleteDropdown = document.getElementById('autocompleteDropdown');
+    // Chart type dropdown
+    const chartTypeBtn = document.getElementById('chartTypeBtn');
+    const chartTypeDropdown = document.getElementById('chartTypeDropdown');
     
-    let searchTimeout;
-    searchInput.addEventListener('input', async (e) => {
-        clearTimeout(searchTimeout);
-        const query = e.target.value.trim();
+    if (chartTypeBtn && chartTypeDropdown) {
+        chartTypeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            chartTypeDropdown.classList.toggle('show');
+        });
         
-        if (query.length >= 1) {
-            searchTimeout = setTimeout(async () => {
-                try {
-                    const results = await searchStocks(query);
-                    displayAutocomplete(results);
-                } catch (error) {
-                    console.error('Search error:', error);
+        document.querySelectorAll('.dropdown-item[data-chart-type]').forEach(item => {
+            item.addEventListener('click', () => {
+                const type = item.dataset.chartType;
+                currentChartType = type;
+                chartTypeDropdown.classList.remove('show');
+                // Chart type change would be implemented here
+                console.log(`Chart type changed to: ${type}`);
+            });
+        });
+    }
+    
+    // Indicators dropdown
+    const indicatorsBtn = document.getElementById('indicatorsBtn');
+    const indicatorsDropdown = document.getElementById('indicatorsDropdown');
+    
+    if (indicatorsBtn && indicatorsDropdown) {
+        indicatorsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            indicatorsDropdown.classList.toggle('show');
+        });
+        
+        document.querySelectorAll('.dropdown-item[data-indicator]').forEach(item => {
+            item.addEventListener('click', () => {
+                const indicator = item.dataset.indicator;
+                const isActive = activeIndicators.has(indicator);
+                
+                if (isActive) {
+                    activeIndicators.delete(indicator);
+                    item.classList.remove('active');
+                } else {
+                    activeIndicators.add(indicator);
+                    item.classList.add('active');
                 }
-            }, 300);
-        } else {
-            autocompleteDropdown.classList.remove('show');
-        }
-    });
-    
-    // Close autocomplete when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-container')) {
-            autocompleteDropdown.classList.remove('show');
-        }
-    });
-    
-    // Chart Type Dropdown
-    setupChartTypeDropdown();
-    
-    // Indicators Dropdown
-    setupIndicatorsDropdown();
-    
-    // Quantity input
-    document.getElementById('quantityInput').addEventListener('input', updateTotal);
-    
-    // Buy/Sell buttons
-    document.getElementById('buyBtn').addEventListener('click', () => handleTrade('BUY'));
-    document.getElementById('sellBtn').addEventListener('click', () => handleTrade('SELL'));
+                
+                toggleIndicator(indicator, !isActive);
+            });
+        });
+    }
     
     // Close dropdowns when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.dropdown-container')) {
-            document.querySelectorAll('.dropdown-menu').forEach(menu => {
-                menu.classList.remove('show');
-            });
-            document.querySelectorAll('.dropdown-btn').forEach(btn => {
-                btn.classList.remove('open');
-            });
-        }
-    });
-}
-
-// Setup chart type dropdown
-function setupChartTypeDropdown() {
-    const btn = document.getElementById('chartTypeBtn');
-    const menu = document.getElementById('chartTypeMenu');
-    
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.classList.toggle('show');
-        btn.classList.toggle('open');
-        
-        // Close indicators menu
-        document.getElementById('indicatorsMenu').classList.remove('show');
-        document.getElementById('indicatorsBtn').classList.remove('open');
-    });
-    
-    document.querySelectorAll('#chartTypeMenu .dropdown-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const chartType = item.dataset.chartType;
-            
-            // Update active state
-            document.querySelectorAll('#chartTypeMenu .dropdown-item').forEach(i => {
-                i.classList.remove('active');
-            });
-            item.classList.add('active');
-            
-            // Update button label
-            const label = item.textContent;
-            document.getElementById('chartTypeLabel').textContent = `Chart Type: ${label}`;
-            
-            // Update chart
-            currentChartType = chartType;
-            if (klineChart) {
-                klineChart.setChartType(chartType);
-            }
-            
-            // Close menu
-            menu.classList.remove('show');
-            btn.classList.remove('open');
-        });
-    });
-}
-
-// Setup indicators dropdown
-function setupIndicatorsDropdown() {
-    const btn = document.getElementById('indicatorsBtn');
-    const menu = document.getElementById('indicatorsMenu');
-    
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.classList.toggle('show');
-        btn.classList.toggle('open');
-        
-        // Close chart type menu
-        document.getElementById('chartTypeMenu').classList.remove('show');
-        document.getElementById('chartTypeBtn').classList.remove('open');
-        
-        // Update button state
-        updateIndicatorsButtonState();
-    });
-    
-    document.querySelectorAll('.indicator-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const indicator = item.dataset.indicator;
-            
-            // Toggle active state
-            item.classList.toggle('active');
-            
-            // Update active indicators set
-            if (item.classList.contains('active')) {
-                activeIndicators.add(indicator);
-            } else {
-                activeIndicators.delete(indicator);
-            }
-            
-            // Update chart
-            if (klineChart) {
-                klineChart.toggleIndicator(indicator, item.classList.contains('active'));
-            }
-            
-            // Update button state
-            updateIndicatorsButtonState();
-        });
-    });
-}
-
-// Update indicators button state
-function updateIndicatorsButtonState() {
-    const btn = document.getElementById('indicatorsBtn');
-    
-    if (activeIndicators.size > 0) {
-        btn.classList.add('active');
-    } else {
-        btn.classList.remove('active');
-    }
-}
-
-// Display autocomplete results
-function displayAutocomplete(results) {
-    const dropdown = document.getElementById('autocompleteDropdown');
-    
-    if (!results || results.length === 0) {
-        dropdown.classList.remove('show');
-        return;
-    }
-    
-    dropdown.innerHTML = results.map(stock => `
-        <div class="autocomplete-item" data-symbol="${stock.symbol}">
-            <div class="autocomplete-symbol">${stock.symbol}</div>
-            <div class="autocomplete-name">${stock.name}</div>
-        </div>
-    `).join('');
-    
-    dropdown.classList.add('show');
-    
-    // Add click handlers to items
-    dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const symbol = item.dataset.symbol;
-            currentSymbol = symbol;
-            document.getElementById('searchInput').value = symbol;
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.dropdown').forEach(dropdown => {
             dropdown.classList.remove('show');
-            loadChart(symbol, currentTimeframe);
         });
     });
+    
+    // Buy/Sell buttons
+    const buyBtn = document.getElementById('buyBtn');
+    const sellBtn = document.getElementById('sellBtn');
+    
+    if (buyBtn) {
+        buyBtn.addEventListener('click', () => handleTrade('BUY'));
+    }
+    
+    if (sellBtn) {
+        sellBtn.addEventListener('click', () => handleTrade('SELL'));
+    }
+}
+
+// Handle search
+async function handleSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput?.value?.trim().toUpperCase();
+    
+    if (!query) return;
+    
+    try {
+        console.log(`Searching for: ${query}`);
+        
+        // Update current symbol
+        currentSymbol = query;
+        
+        // Load new chart
+        await loadChart(currentSymbol, currentTimeframe);
+        
+        // Update trade card
+        await updateTradeCard(currentSymbol);
+        
+        showSuccess(`Loaded ${currentSymbol}`);
+        
+    } catch (error) {
+        console.error('Search error:', error);
+        showError(`Could not find symbol: ${query}`);
+    }
 }
 
 // Handle trade execution
 async function handleTrade(action) {
     const quantityInput = document.getElementById('quantityInput');
-    const quantity = parseFloat(quantityInput.value);
+    const quantity = parseFloat(quantityInput?.value || 0);
     
-    if (!quantity || quantity <= 0) {
+    if (quantity <= 0) {
         showError('Please enter a valid quantity');
         return;
     }
     
-    if (!klineChart || !klineChart.currentData) {
-        showError('No price data available');
-        return;
+    // Validate trade
+    if (action === 'BUY') {
+        const totalCost = quantity * currentPrice;
+        if (totalCost > portfolioData.cash) {
+            showError(`Insufficient funds. Need $${totalCost.toFixed(2)}, have $${portfolioData.cash.toFixed(2)}`);
+            return;
+        }
+    } else if (action === 'SELL') {
+        if (quantity > currentHolding) {
+            showError(`Insufficient shares. Trying to sell ${quantity}, have ${currentHolding}`);
+            return;
+        }
     }
     
-    const data = klineChart.currentData;
-    const latest = data[data.length - 1];
-    const price = latest.close;
-    
-    const buyBtn = document.getElementById('buyBtn');
-    const sellBtn = document.getElementById('sellBtn');
-    
     try {
-        buyBtn.disabled = true;
-        sellBtn.disabled = true;
-        hideMessages();
+        console.log(`Executing ${action}: ${quantity} ${currentSymbol} @ $${currentPrice}`);
         
-        await executeTrade({
-            user_id: currentUser.id,
-            symbol: currentSymbol,
-            action: action,
-            quantity: quantity,
-            price: price
-        });
+        const result = await executeTrade(currentUser.id, currentSymbol, action, quantity, currentPrice);
         
-        showSuccess(`${action} order executed successfully!`);
-        quantityInput.value = '';
-        updateTotal();
+        showSuccess(`${action} order executed: ${quantity} ${currentSymbol}`);
         
         // Reload portfolio data
         await loadPortfolioData();
         
+        // Update trade card
+        await updateTradeCard(currentSymbol);
+        
+        // Clear quantity input
+        if (quantityInput) {
+            quantityInput.value = '';
+        }
+        
     } catch (error) {
-        console.error('Trade error:', error);
+        console.error('Trade execution error:', error);
         showError(error.message || 'Trade failed');
-    } finally {
-        buyBtn.disabled = false;
-        sellBtn.disabled = false;
     }
-}
-
-// Show error message
-function showError(message) {
-    const errorDiv = document.getElementById('tradeError');
-    errorDiv.textContent = message;
-    errorDiv.classList.add('show');
-    
-    setTimeout(() => {
-        errorDiv.classList.remove('show');
-    }, 5000);
 }
 
 // Show success message
 function showSuccess(message) {
-    const successDiv = document.getElementById('tradeSuccess');
-    successDiv.textContent = message;
-    successDiv.classList.add('show');
+    const notification = document.createElement('div');
+    notification.className = 'notification success';
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10b981;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    document.body.appendChild(notification);
     
     setTimeout(() => {
-        successDiv.classList.remove('show');
-    }, 5000);
+        notification.remove();
+    }, 3000);
 }
 
-// Hide messages
-function hideMessages() {
-    document.getElementById('tradeError').classList.remove('show');
-    document.getElementById('tradeSuccess').classList.remove('show');
+// Show error message
+function showError(message) {
+    const notification = document.createElement('div');
+    notification.className = 'notification error';
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #ef4444;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
 }
 
-// Initialize on page load
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', initializePage);

@@ -57,7 +57,7 @@ export async function getModule(moduleId) {
  */
 export async function getCourseProgress(userId) {
   try {
-    const response = await fetch(`${API_BASE}/courses/progress?userId=${userId}`);
+    const response = await fetch(`${API_BASE}/courses/progress?user_id=${userId}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch course progress');
@@ -89,7 +89,7 @@ export async function startModule(userId, moduleId) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ userId, moduleId })
+      body: JSON.stringify({ user_id: userId, module_id: moduleId })
     });
     
     if (!response.ok) {
@@ -99,7 +99,7 @@ export async function startModule(userId, moduleId) {
     return await response.json();
     
   } catch (error) {
-    console.error('[CourseService] startModule error:', error);
+    console.error('[CourseService] startModule exception:', error);
     throw error;
   }
 }
@@ -142,8 +142,8 @@ export function startTimeTracking(userId, moduleId) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userId: activeSession.userId,
-          moduleId: activeSession.moduleId,
+          user_id: activeSession.userId,
+          module_id: activeSession.moduleId,
           timeSpent: elapsedSeconds
         })
       });
@@ -202,7 +202,7 @@ export async function completeModule(userId, moduleId) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ user_id: userId })
     });
     
     const data = await response.json();
@@ -232,7 +232,7 @@ export async function completeModule(userId, moduleId) {
  */
 export async function isModuleUnlocked(userId, moduleId) {
   try {
-    const response = await fetch(`${API_BASE}/courses/check-unlock/${moduleId}?userId=${userId}`);
+    const response = await fetch(`${API_BASE}/courses/check-unlock/${moduleId}?user_id=${userId}`);
     
     if (!response.ok) {
       return false;

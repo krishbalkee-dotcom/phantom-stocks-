@@ -1,5 +1,5 @@
 /**
- * Courses Page Logic
+ * Courses Page Logic (CLIENT-SIDE)
  * Handles course module display and navigation
  */
 
@@ -19,7 +19,7 @@ const user = await requireAuth();
 const MODULE_ICONS = {
   1: '📚',
   2: '📊',
-  3: '🔍',
+  3: '📈',
   4: '🛡️',
   5: '🎯',
   6: '🧠',
@@ -56,12 +56,12 @@ async function loadCourses() {
     // Render progress bar
     renderProgressBar(progress);
     
-    // Render modules
-    renderModules(modules, progress);
+    // Render modules by category
+    await renderModules(modules, progress);
     
-    // Show content
+    // Hide loading, show content
     document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('modulesGrid').style.display = 'grid';
+    document.getElementById('modulesContent').style.display = 'block';
     
   } catch (error) {
     console.error('[Courses] Error loading courses:', error);
@@ -81,66 +81,91 @@ function renderProgressBar(progress) {
 }
 
 /**
- * Render module cards
+ * Render module cards in their respective sections
  */
 async function renderModules(modules, progress) {
-  const grid = document.getElementById('modulesGrid');
-  let html = '';
+  const beginnerContainer = document.getElementById('beginnerModules');
+  const intermediateContainer = document.getElementById('intermediateModules');
+  const advancedContainer = document.getElementById('advancedModules');
   
+  // Clear containers
+  beginnerContainer.innerHTML = '';
+  intermediateContainer.innerHTML = '';
+  advancedContainer.innerHTML = '';
+  
+  // Process each module
   for (const module of modules) {
     const isCompleted = progress.completed.includes(module.id);
     const isInProgress = progress.inProgress.includes(module.id);
     const isUnlocked = await isModuleUnlocked(user.id, module.id);
     
-    let statusClass = '';
-    let statusText = '';
+    const card = createModuleCard(module, isCompleted, isInProgress, isUnlocked);
     
-    if (isCompleted) {
-      statusClass = 'status-completed';
-      statusText = 'Completed';
-    } else if (isInProgress) {
-      statusClass = 'status-in-progress';
-      statusText = 'In Progress';
-    } else if (isUnlocked) {
-      statusClass = '';
-      statusText = 'Start';
-    } else {
-      statusClass = 'status-locked';
-      statusText = '🔒 Locked';
+    // Add to appropriate container
+    if (module.category === 'beginner') {
+      beginnerContainer.appendChild(card);
+    } else if (module.category === 'intermediate') {
+      intermediateContainer.appendChild(card);
+    } else if (module.category === 'advanced') {
+      advancedContainer.appendChild(card);
     }
-    
-    const cardClass = isCompleted ? 'module-card completed' : isUnlocked ? 'module-card' : 'module-card locked';
-    const icon = MODULE_ICONS[module.id] || '📖';
-    
-    html += `
-      <div class="${cardClass}" data-module-id="${module.id}" data-unlocked="${isUnlocked}">
-        <div class="module-header">
-          <div class="module-icon">${icon}</div>
-          <div class="module-number">MODULE ${module.id}</div>
-        </div>
-        <h3 class="module-title">${module.title}</h3>
-        <p class="module-description">${module.description}</p>
-        <div class="module-footer">
-          <div class="module-status ${statusClass}">${statusText}</div>
-          <div class="module-duration">~10 min read</div>
-        </div>
-      </div>
-    `;
+  }
+}
+
+/**
+ * Create a module card element
+ */
+function createModuleCard(module, isCompleted, isInProgress, isUnlocked) {
+  const card = document.createElement('div');
+  card.className = isCompleted ? 'module-card completed' : isUnlocked ? 'module-card' : 'module-card locked';
+  card.dataset.moduleId = module.id;
+  card.dataset.unlocked = isUnlocked;
+  
+  // Determine status
+  let statusClass = '';
+  let statusText = '';
+  
+  if (isCompleted) {
+    statusClass = 'status-completed';
+    statusText = 'Completed';
+  } else if (isInProgress) {
+    statusClass = 'status-in-progress';
+    statusText = 'In Progress';
+  } else if (isUnlocked) {
+    statusClass = '';
+    statusText = 'Start';
+  } else {
+    statusClass = 'status-locked';
+    statusText = '🔒 Locked';
   }
   
-  grid.innerHTML = html;
+  const icon = MODULE_ICONS[module.id] || '📖';
+  const categoryClass = module.category || 'beginner';
   
-  // Add click handlers
-  grid.querySelectorAll('.module-card').forEach(card => {
+  card.innerHTML = `
+    <div class="module-number-badge">${module.id}</div>
+    <div class="module-header">
+      <div class="module-icon ${categoryClass}">${icon}</div>
+      <div class="module-content">
+        <h3 class="module-title">${module.title}</h3>
+      </div>
+    </div>
+    <p class="module-description">${module.description}</p>
+    <div class="module-footer">
+      <div class="module-status ${statusClass}">${statusText}</div>
+      <div class="module-duration">~${module.estimated_time_minutes || 10} min read</div>
+    </div>
+  `;
+  
+  // Add click handler
+  if (isUnlocked) {
+    card.style.cursor = 'pointer';
     card.addEventListener('click', () => {
-      const moduleId = card.dataset.moduleId;
-      const isUnlocked = card.dataset.unlocked === 'true';
-      
-      if (isUnlocked) {
-        window.location.href = `module.html?id=${moduleId}`;
-      }
+      window.location.href = `module.html?id=${module.id}`;
     });
-  });
+  }
+  
+  return card;
 }
 
 // Initialize

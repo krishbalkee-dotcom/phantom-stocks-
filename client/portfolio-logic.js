@@ -1,5 +1,6 @@
 // Portfolio Logic - Integrated with Supabase Backend
-import { requireAuth, logout } from './src/auth/auth.js';
+import { requireAuth } from './src/auth/authGuard.js';
+import { logout } from './src/auth/auth.js';
 import { supabase } from './src/auth/supabaseClient.js';
 import { 
     getPortfolioSummary, 
