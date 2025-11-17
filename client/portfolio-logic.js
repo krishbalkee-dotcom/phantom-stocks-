@@ -584,7 +584,6 @@ window.addEventListener('click', (e) => {
 // Initialize once when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     // Clear any previous init failure flag on successful page load
-    sessionStorage.removeItem('portfolioInitFailed');
     initializePage();
 });
 
