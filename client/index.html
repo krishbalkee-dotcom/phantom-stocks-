@@ -554,8 +554,9 @@
     import { redirectIfAuthenticated } from './src/auth/authGuard.js';
 
     // Check if already authenticated
-    redirectIfAuthenticated();
-
+    if (!sessionStorage.getItem('skipRedirect')) {
+  redirectIfAuthenticated();
+}
     const homePage = document.getElementById('homePage');
     const authPage = document.getElementById('authPage');
     const signInBtn = document.getElementById('signInBtn');
