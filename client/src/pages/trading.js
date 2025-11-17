@@ -1,5 +1,6 @@
 // Trading Page Logic with Dropdown Handlers
-import { requireAuth, logout } from '../auth/auth.js';
+import { requireAuth } from '../auth/authGuard.js';
+import { logout } from '../auth/auth.js';
 import { executeTrade, searchStocks } from '../services/tradingService.js';
 import { getPortfolioSummary } from '../services/portfolioService.js';
 import { initChart, loadChartData, toggleIndicator } from '../kline.js';
@@ -23,7 +24,7 @@ async function initializePage() {
         setupEventListeners();
         
         // Initialize chart
-        initChart('chart-container');
+        initChart('chart');
         
         // Load initial chart
         await loadChart(currentSymbol, currentTimeframe);
