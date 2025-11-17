@@ -94,23 +94,6 @@
       font-weight: 300;
     }
 
-    .logout-btn {
-      padding: 8px 16px;
-      background: transparent;
-      border: 1px solid rgba(220, 38, 38, 0.5);
-      border-radius: 6px;
-      color: #dc2626;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.3s;
-      font-weight: 300;
-      font-family: inherit;
-    }
-
-    .logout-btn:hover {
-      background: rgba(220, 38, 38, 0.1);
-      border-color: #dc2626;
-    }
 
     /* Toolbar */
     .toolbar {
@@ -294,6 +277,55 @@
     .dropdown-menu.show {
       display: block;
     }
+
+    /* Search Results Dropdown */
+    .search-results {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(55, 65, 81, 0.3);
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .search-result-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(55, 65, 81, 0.2);
+      transition: all 0.2s;
+      font-weight: 300;
+    }
+
+    .search-result-item:hover {
+      background: rgba(168, 85, 247, 0.1);
+    }
+
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
+
+    .search-result-item strong {
+      color: #ffffff;
+      font-weight: 400;
+      font-size: 14px;
+    }
+
+    .stock-symbol {
+      color: #a855f7;
+      font-weight: 500;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
 
     .dropdown-item {
       padding: 10px 12px;
@@ -646,7 +678,6 @@
     <div class="user-section">
       <span class="cash-display" id="cashDisplay">$0.00</span>
       <span class="username" id="username">Loading...</span>
-      <button class="logout-btn" id="logoutBtn">Logout</button>
     </div>
   </div>
 
@@ -668,9 +699,9 @@
         type="text" 
         class="search-input" 
         id="searchInput" 
-        placeholder="AAPL"
+        placeholder="Search stocks..."
       >
-      <div class="autocomplete-dropdown" id="autocompleteDropdown">
+      <div class="search-results" id="searchResults" style="display: none;">
         <!-- Populated by JavaScript -->
       </div>
     </div>

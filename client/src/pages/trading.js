@@ -74,10 +74,31 @@ function updateCashDisplay() {
 async function loadChart(symbol, timeframe) {
     try {
         console.log(`Loading chart: ${symbol} ${timeframe}`);
+        
+        // Show loading
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) loadingOverlay.style.display = 'flex';
+        
         await loadChartData(symbol, timeframe);
+        
+        // Hide loading
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+        
+        // Show trade card
+        const tradeCard = document.getElementById('tradeCard');
+        if (tradeCard) tradeCard.style.display = 'block';
+        
+        // Update trade card with symbol info
+        await updateTradeCard(symbol);
+        
         console.log('Chart loaded successfully');
     } catch (error) {
         console.error('Error loading chart:', error);
+        
+        // Hide loading on error
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+        
         showError('Failed to load chart data');
     }
 }
@@ -123,9 +144,10 @@ async function updateTradeCard(symbol) {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search functionality
+    // Search functionality with live results
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
+    const searchResults = document.getElementById('searchResults');
     
     if (searchBtn) {
         searchBtn.addEventListener('click', handleSearch);
@@ -137,7 +159,56 @@ function setupEventListeners() {
                 handleSearch();
             }
         });
+        
+        // Live search as user types
+        searchInput.addEventListener('input', async (e) => {
+            const query = e.target.value.trim();
+            
+            if (query.length < 1) {
+                if (searchResults) searchResults.style.display = 'none';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`https://phantom-stocks.onrender.com/api/trades/search?q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                
+                if (results && results.length > 0 && searchResults) {
+                    const html = results.slice(0, 5).map(stock => `
+                        <div class="search-result-item" data-symbol="${stock.symbol}">
+                            <strong>${stock.name}</strong>
+                            <span class="stock-symbol">${stock.symbol}</span>
+                        </div>
+                    `).join('');
+                    
+                    searchResults.innerHTML = html;
+                    searchResults.style.display = 'block';
+                    
+                    // Add click handlers
+                    searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                        item.addEventListener('click', async () => {
+                            const symbol = item.dataset.symbol;
+                            searchInput.value = symbol;
+                            searchResults.style.display = 'none';
+                            currentSymbol = symbol;
+                            await loadChart(symbol, currentTimeframe);
+                        });
+                    });
+                } else if (searchResults) {
+                    searchResults.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+            }
+        });
     }
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', (e) => {
+        if (searchResults && !searchInput?.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.style.display = 'none';
+        }
+    });
     
     // Timeframe buttons
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
