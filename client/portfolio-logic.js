@@ -40,7 +40,23 @@ async function initializePage() {
         
     } catch (error) {
         console.error('Failed to initialize portfolio:', error);
-        window.location.href = 'index.html';
+        
+        // Only redirect if not already in a redirect loop
+        if (!sessionStorage.getItem('portfolioInitFailed')) {
+            sessionStorage.setItem('portfolioInitFailed', 'true');
+            window.location.href = 'index.html';
+        } else {
+            // Already tried once, show error instead
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; color: white; background: #000;">
+                    <h1>Failed to load portfolio</h1>
+                    <p>${error.message}</p>
+                    <button onclick="sessionStorage.removeItem('portfolioInitFailed'); location.reload();" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">
+                        Retry
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
@@ -565,10 +581,17 @@ window.addEventListener('click', (e) => {
 });
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', initializePage);
+// Initialize once when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Clear any previous init failure flag on successful page load
+    sessionStorage.removeItem('portfolioInitFailed');
+    initializePage();
+});
 
 // Auto-refresh portfolio data every 30 seconds
 setInterval(async () => {
+    if (!currentUser) return; // Don't refresh if not initialized
+    
     try {
         await loadPortfolioData();
         renderPortfolio();
