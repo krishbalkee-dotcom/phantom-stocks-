@@ -63,18 +63,24 @@ async function initializePage() {
 // Load all portfolio data
 async function loadPortfolioData() {
     try {
-        // Fetch all data in parallel
-        const [summary, holdings, transactions, snapshots] = await Promise.all([
+        // Fetch all data in parallel (except snapshots - fetch separately)
+        const [summary, holdings, transactions] = await Promise.all([
             getPortfolioSummary(currentUser.id),
             getHoldings(currentUser.id),
-            getTransactions(currentUser.id, 50),
-            getPortfolioSnapshots(currentUser.id, currentPeriod)
+            getTransactions(currentUser.id, 50)
         ]);
         
         portfolioData = summary;
         holdingsData = holdings;
         transactionsData = transactions;
-        snapshotsData = snapshots;
+        
+        // Try to fetch snapshots, but don't fail if it errors
+        try {
+            snapshotsData = await getPortfolioSnapshots(currentUser.id, currentPeriod);
+        } catch (snapshotError) {
+            console.warn('Could not load portfolio snapshots:', snapshotError);
+            snapshotsData = []; // Default to empty array
+        }
         
     } catch (error) {
         console.error('Error loading portfolio data:', error);
@@ -583,7 +589,6 @@ window.addEventListener('click', (e) => {
 // Initialize on page load
 // Initialize once when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Clear any previous init failure flag on successful page load
     initializePage();
 });
 
