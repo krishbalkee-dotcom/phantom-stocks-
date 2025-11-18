@@ -7,7 +7,6 @@ import {
   createChart, 
   CandlestickSeries,
   BarSeries,
-  LineSeries,
   BaselineSeries,
   HistogramSeries
 } from 'https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.mjs';
@@ -195,7 +194,7 @@ export function changeChartType(type) {
   candlestickSeries = null;
   
   // Step 4: Recreate main chart series with new type
-  let lineData, baselineData; // Declare at function scope
+  let baselineData; // Declare at function scope
   
   switch (type) {
     case 'candlestick':
@@ -216,18 +215,6 @@ export function changeChartType(type) {
         thinBars: false,
       }, PANE_MAIN);
       candlestickSeries.setData(currentSeriesData);
-      break;
-      
-    case 'line':
-      candlestickSeries = chart.addSeries(LineSeries, {
-        color: '#a855f7',
-        lineWidth: 2,
-      }, PANE_MAIN);
-      lineData = currentSeriesData.map(bar => ({
-        time: bar.time,
-        value: bar.close
-      }));
-      candlestickSeries.setData(lineData);
       break;
       
     case 'baseline':

@@ -355,7 +355,6 @@ function setupEventListeners() {
                     const typeNames = {
                         'candlestick': 'Candlestick',
                         'bars': 'Bars',
-                        'line': 'Line',
                         'baseline': 'Baseline'
                     };
                     label.textContent = `Chart Type: ${typeNames[type] || type}`;
