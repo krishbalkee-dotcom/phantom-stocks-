@@ -280,13 +280,6 @@ function setupEventListeners() {
         });
     }
     
-    // Close search results when clicking outside
-    document.addEventListener('click', (e) => {
-        if (searchResults && !searchInput?.contains(e.target) && !searchResults.contains(e.target)) {
-            searchResults.style.display = 'none';
-        }
-    });
-    
     // Timeframe buttons
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -351,10 +344,27 @@ function setupEventListeners() {
     }
     
     // Close dropdowns when clicking outside
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.dropdown').forEach(dropdown => {
-            dropdown.classList.remove('show');
-        });
+    document.addEventListener('click', (e) => {
+        // Close chart type menu if clicking outside
+        const chartTypeMenu = document.getElementById('chartTypeMenu');
+        const chartTypeBtn = document.getElementById('chartTypeBtn');
+        if (chartTypeMenu && !chartTypeBtn?.contains(e.target) && !chartTypeMenu.contains(e.target)) {
+            chartTypeMenu.classList.remove('show');
+        }
+        
+        // Close indicators menu if clicking outside
+        const indicatorsMenu = document.getElementById('indicatorsMenu');
+        const indicatorsBtn = document.getElementById('indicatorsBtn');
+        if (indicatorsMenu && !indicatorsBtn?.contains(e.target) && !indicatorsMenu.contains(e.target)) {
+            indicatorsMenu.classList.remove('show');
+        }
+        
+        // Close search results if clicking outside
+        const searchResults = document.getElementById('searchResults');
+        const searchInput = document.getElementById('searchInput');
+        if (searchResults && !searchInput?.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.style.display = 'none';
+        }
     });
     
     // Quantity input - update total on change
