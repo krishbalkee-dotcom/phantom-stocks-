@@ -210,7 +210,7 @@ export function changeChartType(type) {
   
   console.log(`[Kline] Chart type changed to ${type}`);
 }
-}
+
 
 /**
  * Initialize chart
