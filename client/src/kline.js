@@ -138,7 +138,8 @@ function validateIndicatorOrder(indicator, isEnabling) {
 }
 
 /**
- * Change chart type
+ * Change chart type - ROBUST v5 implementation
+ * Handles pane cleanup by removing/recreating all series
  */
 export function changeChartType(type) {
   if (!chart || !candlestickSeries) {
@@ -148,9 +149,53 @@ export function changeChartType(type) {
   
   console.log(`[Kline] Changing chart type to: ${type}`);
   
+  // Step 1: Store ALL current data before removing anything
   const currentSeriesData = candlestickSeries.data ? candlestickSeries.data() : [];
   
+  // Store which indicators are active
+  const wasVolumeActive = activeIndicators.volume;
+  const wasSMAActive = activeIndicators.sma;
+  const wasEMAActive = activeIndicators.ema;
+  const wasBollingerActive = activeIndicators.bollinger;
+  const wasRSIActive = activeIndicators.rsi;
+  const wasMACDActive = activeIndicators.macd;
+  
+  // Step 2: Remove ALL overlay indicators first (from main pane)
+  if (indicatorSeries.sma20) {
+    chart.removeSeries(indicatorSeries.sma20);
+    indicatorSeries.sma20 = null;
+  }
+  if (indicatorSeries.sma50) {
+    chart.removeSeries(indicatorSeries.sma50);
+    indicatorSeries.sma50 = null;
+  }
+  if (indicatorSeries.ema12) {
+    chart.removeSeries(indicatorSeries.ema12);
+    indicatorSeries.ema12 = null;
+  }
+  if (indicatorSeries.ema26) {
+    chart.removeSeries(indicatorSeries.ema26);
+    indicatorSeries.ema26 = null;
+  }
+  if (indicatorSeries.bollingerUpper) {
+    chart.removeSeries(indicatorSeries.bollingerUpper);
+    indicatorSeries.bollingerUpper = null;
+  }
+  if (indicatorSeries.bollingerMiddle) {
+    chart.removeSeries(indicatorSeries.bollingerMiddle);
+    indicatorSeries.bollingerMiddle = null;
+  }
+  if (indicatorSeries.bollingerLower) {
+    chart.removeSeries(indicatorSeries.bollingerLower);
+    indicatorSeries.bollingerLower = null;
+  }
+  
+  // Step 3: Remove the main chart series LAST
   chart.removeSeries(candlestickSeries);
+  candlestickSeries = null;
+  
+  // Step 4: Recreate main chart series with new type
+  let lineData, baselineData; // Declare at function scope
   
   switch (type) {
     case 'candlestick':
@@ -161,6 +206,7 @@ export function changeChartType(type) {
         wickUpColor: '#10b981',
         wickDownColor: '#ef4444',
       }, PANE_MAIN);
+      candlestickSeries.setData(currentSeriesData);
       break;
       
     case 'bars':
@@ -169,6 +215,7 @@ export function changeChartType(type) {
         downColor: '#ef4444',
         thinBars: false,
       }, PANE_MAIN);
+      candlestickSeries.setData(currentSeriesData);
       break;
       
     case 'line':
@@ -176,12 +223,12 @@ export function changeChartType(type) {
         color: '#a855f7',
         lineWidth: 2,
       }, PANE_MAIN);
-      const lineData = currentSeriesData.map(bar => ({
+      lineData = currentSeriesData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
       candlestickSeries.setData(lineData);
-      break; // Don't return - fall through to end
+      break;
       
     case 'baseline':
       candlestickSeries = chart.addSeries(BaselineSeries, {
@@ -193,28 +240,35 @@ export function changeChartType(type) {
         bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
         bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
       }, PANE_MAIN);
-      const baselineData = currentSeriesData.map(bar => ({
+      baselineData = currentSeriesData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
       candlestickSeries.setData(baselineData);
-      break; // Don't return - fall through to end
-      
-    default:
-      // For candlestick and bars, set data here
-      if (currentSeriesData && currentSeriesData.length > 0) {
-        candlestickSeries.setData(currentSeriesData);
-      }
       break;
   }
   
-  console.log(`[Kline] Chart type changed to ${type}`);
+  // Step 5: Recreate overlay indicators if they were active
+  if (wasSMAActive && currentData && currentData.indicators) {
+    showSMA(currentData.indicators);
+  }
+  
+  if (wasEMAActive && currentData && currentData.indicators) {
+    showEMA(currentData.indicators);
+  }
+  
+  if (wasBollingerActive && currentData && currentData.indicators?.bollingerBands) {
+    showBollinger(currentData.indicators.bollingerBands);
+  }
+  
+  console.log(`[Kline] Chart type changed to ${type} successfully`);
 }
 
 
 /**
  * Initialize chart
  */
+
 export function initChart(containerId) {
   const container = document.getElementById(containerId);
   
