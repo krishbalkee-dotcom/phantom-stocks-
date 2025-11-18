@@ -4,7 +4,7 @@
  * This is a simplified interface - you should integrate your actual kline.js file here
  */
 
-import { createChart } from 'https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.mjs';
+import { createChart } from 'https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.mjs';
 
 let chart = null;
 let candlestickSeries = null;
