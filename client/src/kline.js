@@ -1,6 +1,6 @@
 /**
  * Kline.js - TradingView Lightweight Charts v5.0.0
- * Multi-pane support with volume, RSI, and MACD
+ * TRUE Multi-pane support using pane index parameter
  */
 
 import { 
@@ -14,7 +14,6 @@ import {
 
 let chart = null;
 let candlestickSeries = null;
-let volumeSeries = null;
 let currentData = null;
 let activeIndicators = {
   volume: false,
@@ -25,97 +24,11 @@ let activeIndicators = {
   macd: false
 };
 
-/**
- * Calculate pane heights based on active indicators
- */
-function calculatePaneHeights() {
-  const active = [];
-  
-  if (activeIndicators.volume) active.push('volume');
-  if (activeIndicators.rsi) active.push('rsi');
-  if (activeIndicators.macd) active.push('macd');
-  
-  const numPanes = 1 + active.length;
-  
-  switch (numPanes) {
-    case 1:
-      return { main: 1.0 };
-    case 2:
-      return { 
-        main: 0.70,
-        [active[0]]: 0.30
-      };
-    case 3:
-      return { 
-        main: 0.60,
-        [active[0]]: 0.20,
-        [active[1]]: 0.20
-      };
-    case 4:
-      return { 
-        main: 0.50,
-        [active[0]]: 0.20,
-        [active[1]]: 0.15,
-        [active[2]]: 0.15
-      };
-    default:
-      return { main: 1.0 };
-  }
-}
-
-/**
- * Apply pane heights to all series
- */
-function applyPaneHeights() {
-  const heights = calculatePaneHeights();
-  
-  console.log('[Kline] Applying pane heights:', heights);
-  
-  // Main chart margins
-  if (candlestickSeries) {
-    candlestickSeries.applyOptions({
-      priceScaleId: 'right',
-      scaleMargins: {
-        top: 0.1,
-        bottom: heights.main < 1 ? (1 - heights.main + 0.05) : 0.1,
-      }
-    });
-  }
-  
-  // Volume margins
-  if (indicatorSeries.volume && heights.volume) {
-    const volumeBottom = (heights.rsi || 0) + (heights.macd || 0);
-    indicatorSeries.volume.applyOptions({
-      scaleMargins: {
-        top: 1 - heights.volume - volumeBottom,
-        bottom: volumeBottom,
-      }
-    });
-  }
-  
-  // RSI margins
-  if (indicatorSeries.rsi && heights.rsi) {
-    const rsiBottom = heights.macd || 0;
-    indicatorSeries.rsi.applyOptions({
-      scaleMargins: {
-        top: 1 - heights.rsi - rsiBottom,
-        bottom: rsiBottom,
-      }
-    });
-  }
-  
-  // MACD margins
-  if (indicatorSeries.macdLine && heights.macd) {
-    const margin = { top: 1 - heights.macd, bottom: 0 };
-    indicatorSeries.macdLine.applyOptions({ scaleMargins: margin });
-    if (indicatorSeries.macdSignal) {
-      indicatorSeries.macdSignal.applyOptions({ scaleMargins: margin });
-    }
-    if (indicatorSeries.macdHistogram) {
-      indicatorSeries.macdHistogram.applyOptions({ scaleMargins: margin });
-    }
-  }
-}
+// Pane indices
+const PANE_MAIN = 0;
+const PANE_VOLUME = 1;
+const PANE_RSI = 2;
+const PANE_MACD = 3;
 
 /**
  * Change chart type
@@ -128,13 +41,10 @@ export function changeChartType(type) {
   
   console.log(`[Kline] Changing chart type to: ${type}`);
   
-  // Store current data
   const currentSeriesData = candlestickSeries.data ? candlestickSeries.data() : [];
   
-  // Remove old series
   chart.removeSeries(candlestickSeries);
   
-  // Create new series based on type
   switch (type) {
     case 'candlestick':
       candlestickSeries = chart.addSeries(CandlestickSeries, {
@@ -143,8 +53,7 @@ export function changeChartType(type) {
         borderVisible: false,
         wickUpColor: '#10b981',
         wickDownColor: '#ef4444',
-        priceScaleId: 'right'
-      });
+      }, PANE_MAIN);
       break;
       
     case 'bars':
@@ -152,22 +61,19 @@ export function changeChartType(type) {
         upColor: '#10b981',
         downColor: '#ef4444',
         thinBars: false,
-        priceScaleId: 'right'
-      });
+      }, PANE_MAIN);
       break;
       
     case 'line':
       candlestickSeries = chart.addSeries(LineSeries, {
         color: '#a855f7',
         lineWidth: 2,
-        priceScaleId: 'right'
-      });
+      }, PANE_MAIN);
       const lineData = currentSeriesData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
       candlestickSeries.setData(lineData);
-      applyPaneHeights();
       return;
       
     case 'baseline':
@@ -179,23 +85,18 @@ export function changeChartType(type) {
         bottomLineColor: '#ef4444',
         bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
         bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
-        priceScaleId: 'right'
-      });
+      }, PANE_MAIN);
       const baselineData = currentSeriesData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
       candlestickSeries.setData(baselineData);
-      applyPaneHeights();
       return;
   }
   
-  // Set data back for candlestick/bars
   if (currentSeriesData && currentSeriesData.length > 0) {
     candlestickSeries.setData(currentSeriesData);
   }
-  
-  applyPaneHeights();
 }
 
 /**
@@ -215,6 +116,11 @@ export function initChart(containerId) {
     layout: {
       background: { color: '#0a0a0a' },
       textColor: '#d1d5db',
+      panes: {
+        separatorColor: 'rgba(55, 65, 81, 0.3)',
+        separatorHoverColor: 'rgba(55, 65, 81, 0.6)',
+        enableResize: true,
+      },
     },
     grid: {
       vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -233,16 +139,15 @@ export function initChart(containerId) {
     },
   });
   
-  // Create candlestick series with v5 API
+  // Create candlestick series in pane 0 (main)
   candlestickSeries = chart.addSeries(CandlestickSeries, {
     upColor: '#10b981',
     downColor: '#ef4444',
     borderVisible: false,
     wickUpColor: '#10b981',
     wickDownColor: '#ef4444',
-  });
+  }, PANE_MAIN);
   
-  // Handle resize
   const resizeObserver = new ResizeObserver(entries => {
     if (entries.length === 0 || entries[0].target !== container) {
       return;
@@ -253,7 +158,7 @@ export function initChart(containerId) {
   
   resizeObserver.observe(container);
   
-  console.log('[Kline] Chart initialized with v5 API');
+  console.log('[Kline] Chart initialized with v5 multi-pane API');
 }
 
 /**
@@ -314,7 +219,6 @@ export async function loadChartData(symbol, timeframe) {
       showMACD(data.indicators.macd);
     }
     
-    applyPaneHeights();
     chart.timeScale().fitContent();
     
     console.log(`[Kline] Loaded ${candleData.length} bars`);
@@ -391,8 +295,6 @@ export function toggleIndicator(indicator, isActive) {
       }
       break;
   }
-  
-  applyPaneHeights();
 }
 
 // Indicator series storage
@@ -413,23 +315,16 @@ let indicatorSeries = {
 
 function showVolume(volumeData) {
   if (!volumeData) return;
-  console.log('[Kline] Showing volume');
+  console.log('[Kline] Showing volume in pane 1');
   
   if (!indicatorSeries.volume) {
+    // Add volume to PANE 1
     indicatorSeries.volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-      scaleMargins: { top: 0.70, bottom: 0.30 }
-    });
+    }, PANE_VOLUME);
   }
   
-  const formattedData = volumeData.map(v => ({
-    time: v.time,
-    value: v.value,
-    color: v.color
-  }));
-  
-  indicatorSeries.volume.setData(formattedData);
+  indicatorSeries.volume.setData(volumeData);
 }
 
 function hideVolume() {
@@ -442,13 +337,14 @@ function hideVolume() {
 function showSMA(indicators) {
   if (!indicators) return;
   
+  // SMA overlays on main chart (pane 0)
   if (indicators.sma20) {
     if (!indicatorSeries.sma20) {
       indicatorSeries.sma20 = chart.addSeries(LineSeries, {
         color: '#2962FF',
         lineWidth: 2,
         title: 'SMA 20'
-      });
+      }, PANE_MAIN);
     }
     
     const data20 = indicators.sma20
@@ -464,7 +360,7 @@ function showSMA(indicators) {
         color: '#FF6D00',
         lineWidth: 2,
         title: 'SMA 50'
-      });
+      }, PANE_MAIN);
     }
     
     const data50 = indicators.sma50
@@ -490,13 +386,14 @@ function hideSMA() {
 function showEMA(indicators) {
   if (!indicators) return;
   
+  // EMA overlays on main chart (pane 0)
   if (indicators.ema12) {
     if (!indicatorSeries.ema12) {
       indicatorSeries.ema12 = chart.addSeries(LineSeries, {
         color: '#00E676',
         lineWidth: 2,
         title: 'EMA 12'
-      });
+      }, PANE_MAIN);
     }
     
     const data12 = indicators.ema12
@@ -512,7 +409,7 @@ function showEMA(indicators) {
         color: '#FFAB00',
         lineWidth: 2,
         title: 'EMA 26'
-      });
+      }, PANE_MAIN);
     }
     
     const data26 = indicators.ema26
@@ -539,6 +436,7 @@ function showBollinger(bollingerData) {
   if (!bollingerData) return;
   console.log('[Kline] Showing Bollinger Bands');
   
+  // Bollinger overlays on main chart (pane 0)
   if (bollingerData.upper) {
     if (!indicatorSeries.bollingerUpper) {
       indicatorSeries.bollingerUpper = chart.addSeries(LineSeries, {
@@ -546,7 +444,7 @@ function showBollinger(bollingerData) {
         lineWidth: 1,
         lineStyle: 2,
         title: 'BB Upper'
-      });
+      }, PANE_MAIN);
     }
     
     const upperData = bollingerData.upper
@@ -562,7 +460,7 @@ function showBollinger(bollingerData) {
         color: 'rgba(168, 85, 247, 0.8)',
         lineWidth: 2,
         title: 'BB Middle'
-      });
+      }, PANE_MAIN);
     }
     
     const middleData = bollingerData.middle
@@ -579,7 +477,7 @@ function showBollinger(bollingerData) {
         lineWidth: 1,
         lineStyle: 2,
         title: 'BB Lower'
-      });
+      }, PANE_MAIN);
     }
     
     const lowerData = bollingerData.lower
@@ -609,16 +507,15 @@ function hideBollinger() {
 
 function showRSI(rsiData) {
   if (!rsiData) return;
-  console.log('[Kline] Showing RSI');
+  console.log('[Kline] Showing RSI in pane 2');
   
   if (!indicatorSeries.rsi) {
+    // Add RSI to PANE 2
     indicatorSeries.rsi = chart.addSeries(LineSeries, {
       color: '#9333ea',
       lineWidth: 2,
       title: 'RSI (14)',
-      priceScaleId: 'rsi',
-      scaleMargins: { top: 0.80, bottom: 0.15 }
-    });
+    }, PANE_RSI);
   }
   
   const data = rsiData
@@ -637,17 +534,16 @@ function hideRSI() {
 
 function showMACD(macdData) {
   if (!macdData) return;
-  console.log('[Kline] Showing MACD');
+  console.log('[Kline] Showing MACD in pane 3');
   
+  // All MACD components go to PANE 3
   if (macdData.macd) {
     if (!indicatorSeries.macdLine) {
       indicatorSeries.macdLine = chart.addSeries(LineSeries, {
         color: '#2962FF',
         lineWidth: 2,
         title: 'MACD',
-        priceScaleId: 'macd',
-        scaleMargins: { top: 0.8, bottom: 0 }
-      });
+      }, PANE_MACD);
     }
     
     const macdLineData = macdData.macd
@@ -663,9 +559,7 @@ function showMACD(macdData) {
         color: '#FF6D00',
         lineWidth: 2,
         title: 'Signal',
-        priceScaleId: 'macd',
-        scaleMargins: { top: 0.8, bottom: 0 }
-      });
+      }, PANE_MACD);
     }
     
     const signalData = macdData.signal
@@ -678,11 +572,8 @@ function showMACD(macdData) {
   if (macdData.histogram) {
     if (!indicatorSeries.macdHistogram) {
       indicatorSeries.macdHistogram = chart.addSeries(HistogramSeries, {
-        color: '#26a69a',
         title: 'Histogram',
-        priceScaleId: 'macd',
-        scaleMargins: { top: 0.8, bottom: 0 }
-      });
+      }, PANE_MACD);
     }
     
     const histogramData = macdData.histogram
