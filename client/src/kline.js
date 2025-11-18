@@ -149,18 +149,26 @@ export function changeChartType(type) {
   
   console.log(`[Kline] Changing chart type to: ${type}`);
   
-  // Step 1: Store ALL current data before removing anything
-  const currentSeriesData = candlestickSeries.data ? candlestickSeries.data() : [];
+  // Use ORIGINAL OHLC data from currentData
+  if (!currentData || !currentData.bars || currentData.bars.length === 0) {
+    console.error('[Kline] No chart data available');
+    return;
+  }
+  
+  const ohlcData = currentData.bars.map(bar => ({
+    time: bar.time,
+    open: parseFloat(bar.open),
+    high: parseFloat(bar.high),
+    low: parseFloat(bar.low),
+    close: parseFloat(bar.close)
+  }));
   
   // Store which indicators are active
-  const wasVolumeActive = activeIndicators.volume;
   const wasSMAActive = activeIndicators.sma;
   const wasEMAActive = activeIndicators.ema;
   const wasBollingerActive = activeIndicators.bollinger;
-  const wasRSIActive = activeIndicators.rsi;
-  const wasMACDActive = activeIndicators.macd;
   
-  // Step 2: Remove ALL overlay indicators first (from main pane)
+  // Remove overlay indicators first
   if (indicatorSeries.sma20) {
     chart.removeSeries(indicatorSeries.sma20);
     indicatorSeries.sma20 = null;
@@ -190,12 +198,12 @@ export function changeChartType(type) {
     indicatorSeries.bollingerLower = null;
   }
   
-  // Step 3: Remove the main chart series LAST
+  // Remove main chart series
   chart.removeSeries(candlestickSeries);
   candlestickSeries = null;
   
-  // Step 4: Recreate main chart series with new type
-  let lineData, baselineData; // Declare at function scope
+  // Recreate with new type using OHLC data
+  let singleValueData;
   
   switch (type) {
     case 'candlestick':
@@ -206,7 +214,7 @@ export function changeChartType(type) {
         wickUpColor: '#10b981',
         wickDownColor: '#ef4444',
       }, PANE_MAIN);
-      candlestickSeries.setData(currentSeriesData);
+      candlestickSeries.setData(ohlcData);
       break;
       
     case 'bars':
@@ -215,7 +223,7 @@ export function changeChartType(type) {
         downColor: '#ef4444',
         thinBars: false,
       }, PANE_MAIN);
-      candlestickSeries.setData(currentSeriesData);
+      candlestickSeries.setData(ohlcData);
       break;
       
     case 'line':
@@ -223,16 +231,16 @@ export function changeChartType(type) {
         color: '#a855f7',
         lineWidth: 2,
       }, PANE_MAIN);
-      lineData = currentSeriesData.map(bar => ({
+      singleValueData = ohlcData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
-      candlestickSeries.setData(lineData);
+      candlestickSeries.setData(singleValueData);
       break;
       
     case 'baseline':
       candlestickSeries = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: currentSeriesData[0]?.open || 0 },
+        baseValue: { type: 'price', price: ohlcData[0]?.close || 0 },
         topLineColor: '#10b981',
         topFillColor1: 'rgba(16, 185, 129, 0.28)',
         topFillColor2: 'rgba(16, 185, 129, 0.05)',
@@ -240,23 +248,21 @@ export function changeChartType(type) {
         bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
         bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
       }, PANE_MAIN);
-      baselineData = currentSeriesData.map(bar => ({
+      singleValueData = ohlcData.map(bar => ({
         time: bar.time,
         value: bar.close
       }));
-      candlestickSeries.setData(baselineData);
+      candlestickSeries.setData(singleValueData);
       break;
   }
   
-  // Step 5: Recreate overlay indicators if they were active
+  // Recreate overlay indicators
   if (wasSMAActive && currentData && currentData.indicators) {
     showSMA(currentData.indicators);
   }
-  
   if (wasEMAActive && currentData && currentData.indicators) {
     showEMA(currentData.indicators);
   }
-  
   if (wasBollingerActive && currentData && currentData.indicators?.bollingerBands) {
     showBollinger(currentData.indicators.bollingerBands);
   }
