@@ -31,12 +31,18 @@ const MODULE_ICONS = {
 // Initialize page
 async function init() {
   // Set username
-  document.getElementById('username').textContent = user.user_metadata?.username || user.email;
+  const usernameEl = document.getElementById('username');
+  if (usernameEl) {
+    usernameEl.textContent = user.user_metadata?.username || user.email;
+  }
   
-  // Setup logout
-  document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await logout();
-  });
+  // Setup logout (if button exists)
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      await logout();
+    });
+  }
   
   // Load courses
   await loadCourses();
