@@ -1,6 +1,6 @@
 /**
  * Kline.js - TradingView Lightweight Charts v5.0.0
- * TRUE Multi-pane support using pane index parameter
+ * Ordered multi-pane system with validation
  */
 
 import { 
@@ -24,11 +24,118 @@ let activeIndicators = {
   macd: false
 };
 
-// Pane indices
+// Fixed pane indices
 const PANE_MAIN = 0;
 const PANE_VOLUME = 1;
 const PANE_RSI = 2;
 const PANE_MACD = 3;
+
+/**
+ * Show notification with slide animation
+ */
+function showNotification(message) {
+  // Remove existing notification if any
+  const existing = document.querySelector('.order-notification');
+  if (existing) {
+    existing.remove();
+  }
+  
+  const notification = document.createElement('div');
+  notification.className = 'order-notification';
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: 10000;
+    font-size: 14px;
+    font-weight: 300;
+    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+  `;
+  
+  // Add animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideInRight {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes fadeOut {
+      to {
+        opacity: 0;
+        transform: translateX(400px);
+      }
+    }
+  `;
+  
+  if (!document.querySelector('style[data-kline-notifications]')) {
+    style.setAttribute('data-kline-notifications', 'true');
+    document.head.appendChild(style);
+  }
+  
+  document.body.appendChild(notification);
+  
+  // Remove after animation completes
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
+/**
+ * Validate indicator order before toggling
+ */
+function validateIndicatorOrder(indicator, isEnabling) {
+  if (isEnabling) {
+    // Enabling indicators - must follow order
+    switch (indicator) {
+      case 'rsi':
+        if (!activeIndicators.volume) {
+          showNotification('Please enable Volume before RSI');
+          return false;
+        }
+        break;
+        
+      case 'macd':
+        if (!activeIndicators.volume || !activeIndicators.rsi) {
+          showNotification('Please enable Volume and RSI before MACD');
+          return false;
+        }
+        break;
+    }
+  } else {
+    // Disabling indicators - must disable in reverse order
+    switch (indicator) {
+      case 'volume':
+        if (activeIndicators.rsi || activeIndicators.macd) {
+          showNotification('Please disable RSI and MACD before disabling Volume');
+          return false;
+        }
+        break;
+        
+      case 'rsi':
+        if (activeIndicators.macd) {
+          showNotification('Please disable MACD before disabling RSI');
+          return false;
+        }
+        break;
+    }
+  }
+  
+  return true; // Valid
+}
 
 /**
  * Change chart type
@@ -136,6 +243,7 @@ export function initChart(containerId) {
       borderColor: 'rgba(255, 255, 255, 0.1)',
       timeVisible: true,
       secondsVisible: false,
+      barSpacing: 12, // Wider bar spacing
     },
   });
   
@@ -230,9 +338,19 @@ export async function loadChartData(symbol, timeframe) {
 }
 
 /**
- * Toggle indicator
+ * Toggle indicator with order validation
  */
 export function toggleIndicator(indicator, isActive) {
+  // Only validate order for volume, rsi, macd
+  const needsValidation = ['volume', 'rsi', 'macd'].includes(indicator);
+  
+  if (needsValidation) {
+    const isValid = validateIndicatorOrder(indicator, isActive);
+    if (!isValid) {
+      return; // Block the toggle
+    }
+  }
+  
   activeIndicators[indicator] = isActive;
   
   console.log(`[Kline] ${indicator} ${isActive ? 'ON' : 'OFF'}`);
@@ -318,7 +436,6 @@ function showVolume(volumeData) {
   console.log('[Kline] Showing volume in pane 1');
   
   if (!indicatorSeries.volume) {
-    // Add volume to PANE 1
     indicatorSeries.volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
     }, PANE_VOLUME);
@@ -337,7 +454,6 @@ function hideVolume() {
 function showSMA(indicators) {
   if (!indicators) return;
   
-  // SMA overlays on main chart (pane 0)
   if (indicators.sma20) {
     if (!indicatorSeries.sma20) {
       indicatorSeries.sma20 = chart.addSeries(LineSeries, {
@@ -386,7 +502,6 @@ function hideSMA() {
 function showEMA(indicators) {
   if (!indicators) return;
   
-  // EMA overlays on main chart (pane 0)
   if (indicators.ema12) {
     if (!indicatorSeries.ema12) {
       indicatorSeries.ema12 = chart.addSeries(LineSeries, {
@@ -436,11 +551,10 @@ function showBollinger(bollingerData) {
   if (!bollingerData) return;
   console.log('[Kline] Showing Bollinger Bands');
   
-  // Bollinger overlays on main chart (pane 0)
   if (bollingerData.upper) {
     if (!indicatorSeries.bollingerUpper) {
       indicatorSeries.bollingerUpper = chart.addSeries(LineSeries, {
-        color: 'rgba(168, 85, 247, 0.5)',
+        color: 'rgba(255, 255, 255, 0.5)', // White with transparency
         lineWidth: 1,
         lineStyle: 2,
         title: 'BB Upper'
@@ -457,7 +571,7 @@ function showBollinger(bollingerData) {
   if (bollingerData.middle) {
     if (!indicatorSeries.bollingerMiddle) {
       indicatorSeries.bollingerMiddle = chart.addSeries(LineSeries, {
-        color: 'rgba(168, 85, 247, 0.8)',
+        color: 'rgba(255, 255, 255, 0.8)', // White with less transparency
         lineWidth: 2,
         title: 'BB Middle'
       }, PANE_MAIN);
@@ -473,7 +587,7 @@ function showBollinger(bollingerData) {
   if (bollingerData.lower) {
     if (!indicatorSeries.bollingerLower) {
       indicatorSeries.bollingerLower = chart.addSeries(LineSeries, {
-        color: 'rgba(168, 85, 247, 0.5)',
+        color: 'rgba(255, 255, 255, 0.5)', // White with transparency
         lineWidth: 1,
         lineStyle: 2,
         title: 'BB Lower'
@@ -510,7 +624,6 @@ function showRSI(rsiData) {
   console.log('[Kline] Showing RSI in pane 2');
   
   if (!indicatorSeries.rsi) {
-    // Add RSI to PANE 2
     indicatorSeries.rsi = chart.addSeries(LineSeries, {
       color: '#9333ea',
       lineWidth: 2,
@@ -536,7 +649,7 @@ function showMACD(macdData) {
   if (!macdData) return;
   console.log('[Kline] Showing MACD in pane 3');
   
-  // All MACD components go to PANE 3
+  // ALL MACD components use PANE_MACD (3) - same pane!
   if (macdData.macd) {
     if (!indicatorSeries.macdLine) {
       indicatorSeries.macdLine = chart.addSeries(LineSeries, {
@@ -559,7 +672,7 @@ function showMACD(macdData) {
         color: '#FF6D00',
         lineWidth: 2,
         title: 'Signal',
-      }, PANE_MACD);
+      }, PANE_MACD); // Same pane as MACD line
     }
     
     const signalData = macdData.signal
@@ -573,7 +686,7 @@ function showMACD(macdData) {
     if (!indicatorSeries.macdHistogram) {
       indicatorSeries.macdHistogram = chart.addSeries(HistogramSeries, {
         title: 'Histogram',
-      }, PANE_MACD);
+      }, PANE_MACD); // Same pane as MACD line and signal
     }
     
     const histogramData = macdData.histogram
