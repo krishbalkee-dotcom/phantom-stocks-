@@ -3,7 +3,7 @@ import { requireAuth } from '../auth/authGuard.js';
 import { logout } from '../auth/auth.js';
 import { executeTrade, searchStocks } from '../services/tradingService.js';
 import { getPortfolioSummary } from '../services/portfolioService.js';
-import { initChart, loadChartData, toggleIndicator } from '../kline.js';
+import { initChart, loadChartData, toggleIndicator, changeChartType } from '../kline.js';
 
 // Global state
 let currentUser = null;
@@ -305,7 +305,21 @@ function setupEventListeners() {
                 const type = item.dataset.chartType;
                 currentChartType = type;
                 chartTypeMenu.classList.remove('show');
-                // Chart type change would be implemented here
+                
+                // Update label
+                const label = document.getElementById('chartTypeLabel');
+                if (label) {
+                    const typeNames = {
+                        'candlestick': 'Candlestick',
+                        'bars': 'Bars',
+                        'line': 'Line',
+                        'baseline': 'Baseline'
+                    };
+                    label.textContent = `Chart Type: ${typeNames[type] || type}`;
+                }
+                
+                // Change chart type
+                changeChartType(type);
                 console.log(`Chart type changed to: ${type}`);
             });
         });
@@ -415,7 +429,7 @@ async function handleSearch() {
 
 // Handle trade execution
 async function handleTrade(action) {
-    const quantityInput = document.getElementById('quantityInput');
+    const quantityInput = document.getElementById('quantity');
     const quantity = parseFloat(quantityInput?.value || 0);
     
     if (quantity <= 0) {

@@ -20,6 +20,190 @@ let activeIndicators = {
 };
 
 /**
+ * Calculate pane heights based on active indicators
+ * Returns object with height percentages for each pane
+ */
+function calculatePaneHeights() {
+  const active = [];
+  
+  // Check which bottom panes are active
+  if (activeIndicators.volume) active.push('volume');
+  if (activeIndicators.rsi) active.push('rsi');
+  if (activeIndicators.macd) active.push('macd');
+  
+  const numPanes = 1 + active.length; // Main pane + active bottom panes
+  
+  switch (numPanes) {
+    case 1: // Only main chart
+      return { main: 1.0 };
+      
+    case 2: // Main + 1 indicator
+      return { 
+        main: 0.70,
+        [active[0]]: 0.30
+      };
+      
+    case 3: // Main + 2 indicators
+      return { 
+        main: 0.60,
+        [active[0]]: 0.20,
+        [active[1]]: 0.20
+      };
+      
+    case 4: // Main + 3 indicators
+      return { 
+        main: 0.50,
+        [active[0]]: 0.20,
+        [active[1]]: 0.15,
+        [active[2]]: 0.15
+      };
+      
+    default:
+      return { main: 1.0 };
+  }
+}
+
+/**
+ * Apply pane heights to chart
+ */
+function applyPaneHeights() {
+  const heights = calculatePaneHeights();
+  
+  console.log('[Kline] Applying pane heights:', heights);
+  
+  // Apply main chart height
+  if (candlestickSeries) {
+    candlestickSeries.applyOptions({
+      priceScaleId: 'right',
+      scaleMargins: {
+        top: 0.1,
+        bottom: heights.main < 1 ? (1 - heights.main + 0.05) : 0.1,
+      }
+    });
+  }
+  
+  // Apply volume height
+  if (indicatorSeries.volume && heights.volume) {
+    const volumeBottom = heights.rsi ? heights.rsi : 0;
+    const macdBottom = heights.macd ? heights.macd : 0;
+    indicatorSeries.volume.applyOptions({
+      scaleMargins: {
+        top: 1 - heights.volume - volumeBottom - macdBottom,
+        bottom: volumeBottom + macdBottom,
+      }
+    });
+  }
+  
+  // Apply RSI height
+  if (indicatorSeries.rsi && heights.rsi) {
+    const macdBottom = heights.macd ? heights.macd : 0;
+    indicatorSeries.rsi.applyOptions({
+      scaleMargins: {
+        top: 1 - heights.rsi - macdBottom,
+        bottom: macdBottom,
+      }
+    });
+  }
+  
+  // Apply MACD height
+  if (indicatorSeries.macdLine && heights.macd) {
+    const margin = { top: 1 - heights.macd, bottom: 0 };
+    indicatorSeries.macdLine.applyOptions({ scaleMargins: margin });
+    if (indicatorSeries.macdSignal) {
+      indicatorSeries.macdSignal.applyOptions({ scaleMargins: margin });
+    }
+    if (indicatorSeries.macdHistogram) {
+      indicatorSeries.macdHistogram.applyOptions({ scaleMargins: margin });
+    }
+  }
+}
+
+
+/**
+ * Change chart type
+ */
+export function changeChartType(type) {
+  if (!chart || !candlestickSeries) {
+    console.warn('[Kline] Chart not initialized');
+    return;
+  }
+  
+  console.log(`[Kline] Changing chart type to: ${type}`);
+  
+  // Store current data
+  const currentSeriesData = candlestickSeries.data ? candlestickSeries.data() : [];
+  
+  // Remove old series
+  chart.removeSeries(candlestickSeries);
+  
+  // Create new series based on type
+  switch (type) {
+    case 'candlestick':
+      candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#10b981',
+        downColor: '#ef4444',
+        borderVisible: false,
+        wickUpColor: '#10b981',
+        wickDownColor: '#ef4444',
+        priceScaleId: 'right'
+      });
+      break;
+      
+    case 'bars':
+      candlestickSeries = chart.addBarSeries({
+        upColor: '#10b981',
+        downColor: '#ef4444',
+        thinBars: false,
+        priceScaleId: 'right'
+      });
+      break;
+      
+    case 'line':
+      candlestickSeries = chart.addLineSeries({
+        color: '#a855f7',
+        lineWidth: 2,
+        priceScaleId: 'right'
+      });
+      // For line charts, we only need close prices
+      const lineData = currentSeriesData.map(bar => ({
+        time: bar.time,
+        value: bar.close
+      }));
+      candlestickSeries.setData(lineData);
+      applyPaneHeights(); // Reapply heights after chart type change
+      return;
+      
+    case 'baseline':
+      candlestickSeries = chart.addBaselineSeries({
+        baseValue: { type: 'price', price: currentSeriesData[0]?.open || 0 },
+        topLineColor: '#10b981',
+        topFillColor1: 'rgba(16, 185, 129, 0.28)',
+        topFillColor2: 'rgba(16, 185, 129, 0.05)',
+        bottomLineColor: '#ef4444',
+        bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
+        bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
+        priceScaleId: 'right'
+      });
+      // For baseline, also use close prices
+      const baselineData = currentSeriesData.map(bar => ({
+        time: bar.time,
+        value: bar.close
+      }));
+      candlestickSeries.setData(baselineData);
+      applyPaneHeights(); // Reapply heights after chart type change
+      return;
+  }
+  
+  // Set data back for candlestick/bars
+  if (currentSeriesData && currentSeriesData.length > 0) {
+    candlestickSeries.setData(currentSeriesData);
+  }
+  
+  // Reapply pane heights to maintain layout
+  applyPaneHeights();
+}
+
+/**
  * Initialize chart
  */
 export function initChart(containerId) {
@@ -110,21 +294,40 @@ export async function loadChartData(symbol, timeframe) {
     // Set candlestick data
     candlestickSeries.setData(candleData);
     
-    // If volume is active, show it
-    if (activeIndicators.volume && data.indicators?.volume) {
-      showVolume(data.indicators.volume);
+    // Extract volume from bars
+    const volumeData = data.bars.map(bar => ({
+      time: bar.time,
+      value: bar.volume || 0,
+      color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+    }));
+    
+    // Reload active indicators with new data
+    if (activeIndicators.volume) {
+      showVolume(volumeData);
     }
     
-    // If other indicators are active, show them
-    if (activeIndicators.sma && data.indicators?.sma) {
-      showSMA(data.indicators.sma);
+    if (activeIndicators.sma && data.indicators) {
+      showSMA(data.indicators);
     }
     
-    if (activeIndicators.ema && data.indicators?.ema) {
-      showEMA(data.indicators.ema);
+    if (activeIndicators.ema && data.indicators) {
+      showEMA(data.indicators);
     }
     
-    // ... other indicators
+    if (activeIndicators.bollinger && data.indicators?.bollingerBands) {
+      showBollinger(data.indicators.bollingerBands);
+    }
+    
+    if (activeIndicators.rsi && data.indicators?.rsi) {
+      showRSI(data.indicators.rsi);
+    }
+    
+    if (activeIndicators.macd && data.indicators?.macd) {
+      showMACD(data.indicators.macd);
+    }
+    
+    // Apply pane heights based on active indicators
+    applyPaneHeights();
     
     // Fit content
     chart.timeScale().fitContent();
@@ -145,45 +348,50 @@ export function toggleIndicator(indicator, isActive) {
   
   console.log(`[Kline] ${indicator} ${isActive ? 'ON' : 'OFF'}`);
   
-  if (!currentData || !currentData.indicators) {
+  if (!currentData) {
     return;
   }
   
   switch (indicator) {
     case 'volume':
-      if (isActive) {
-        showVolume(currentData.indicators.volume);
+      if (isActive && currentData.bars) {
+        const volumeData = currentData.bars.map(bar => ({
+          time: bar.time,
+          value: bar.volume || 0,
+          color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+        }));
+        showVolume(volumeData);
       } else {
         hideVolume();
       }
       break;
     
     case 'sma':
-      if (isActive) {
-        showSMA(currentData.indicators.sma);
+      if (isActive && currentData.indicators) {
+        showSMA(currentData.indicators);
       } else {
         hideSMA();
       }
       break;
     
     case 'ema':
-      if (isActive) {
-        showEMA(currentData.indicators.ema);
+      if (isActive && currentData.indicators) {
+        showEMA(currentData.indicators);
       } else {
         hideEMA();
       }
       break;
     
     case 'bollinger':
-      if (isActive) {
-        showBollinger(currentData.indicators.bollinger);
+      if (isActive && currentData.indicators?.bollingerBands) {
+        showBollinger(currentData.indicators.bollingerBands);
       } else {
         hideBollinger();
       }
       break;
     
     case 'rsi':
-      if (isActive) {
+      if (isActive && currentData.indicators?.rsi) {
         showRSI(currentData.indicators.rsi);
       } else {
         hideRSI();
@@ -191,13 +399,16 @@ export function toggleIndicator(indicator, isActive) {
       break;
     
     case 'macd':
-      if (isActive) {
+      if (isActive && currentData.indicators?.macd) {
         showMACD(currentData.indicators.macd);
       } else {
         hideMACD();
       }
       break;
   }
+  
+  // Recalculate and apply pane heights after toggling
+  applyPaneHeights();
 }
 
 // Indicator series storage
@@ -222,24 +433,25 @@ let indicatorSeries = {
 function showVolume(volumeData) {
   if (!volumeData) return;
   
+  console.log('[Kline] Showing volume');
+  
   if (!indicatorSeries.volume) {
     indicatorSeries.volume = chart.addHistogramSeries({
-      color: '#26a69a',
       priceFormat: {
         type: 'volume',
       },
       priceScaleId: 'volume',
       scaleMargins: {
-        top: 0.8,
-        bottom: 0,
+        top: 0.70,
+        bottom: 0.30,
       },
     });
   }
   
   const formattedData = volumeData.map(v => ({
-    time: Math.floor(new Date(v.time).getTime() / 1000),
+    time: typeof v.time === 'number' ? v.time : Math.floor(new Date(v.time).getTime() / 1000),
     value: v.value,
-    color: v.color === 'green' ? '#10b981' : '#ef4444'
+    color: v.color || (v.value > 0 ? '#26a69a' : '#ef5350')
   }));
   
   indicatorSeries.volume.setData(formattedData);
@@ -258,11 +470,11 @@ function hideVolume() {
 /**
  * Show SMA indicators
  */
-function showSMA(smaData) {
-  if (!smaData) return;
+function showSMA(indicators) {
+  if (!indicators) return;
   
   // SMA 20
-  if (smaData.sma20) {
+  if (indicators.sma20) {
     if (!indicatorSeries.sma20) {
       indicatorSeries.sma20 = chart.addLineSeries({
         color: '#2962FF',
@@ -271,16 +483,19 @@ function showSMA(smaData) {
       });
     }
     
-    const data20 = smaData.sma20.map(d => ({
-      time: Math.floor(new Date(d.time).getTime() / 1000),
-      value: d.value
-    }));
+    // Filter out null values and ensure time is a number
+    const data20 = indicators.sma20
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
     
     indicatorSeries.sma20.setData(data20);
   }
   
   // SMA 50
-  if (smaData.sma50) {
+  if (indicators.sma50) {
     if (!indicatorSeries.sma50) {
       indicatorSeries.sma50 = chart.addLineSeries({
         color: '#FF6D00',
@@ -289,10 +504,12 @@ function showSMA(smaData) {
       });
     }
     
-    const data50 = smaData.sma50.map(d => ({
-      time: Math.floor(new Date(d.time).getTime() / 1000),
-      value: d.value
-    }));
+    const data50 = indicators.sma50
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
     
     indicatorSeries.sma50.setData(data50);
   }
@@ -316,11 +533,11 @@ function hideSMA() {
 /**
  * Show EMA indicators
  */
-function showEMA(emaData) {
-  if (!emaData) return;
+function showEMA(indicators) {
+  if (!indicators) return;
   
   // EMA 12
-  if (emaData.ema12) {
+  if (indicators.ema12) {
     if (!indicatorSeries.ema12) {
       indicatorSeries.ema12 = chart.addLineSeries({
         color: '#00E676',
@@ -329,16 +546,18 @@ function showEMA(emaData) {
       });
     }
     
-    const data12 = emaData.ema12.map(d => ({
-      time: Math.floor(new Date(d.time).getTime() / 1000),
-      value: d.value
-    }));
+    const data12 = indicators.ema12
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
     
     indicatorSeries.ema12.setData(data12);
   }
   
   // EMA 26
-  if (emaData.ema26) {
+  if (indicators.ema26) {
     if (!indicatorSeries.ema26) {
       indicatorSeries.ema26 = chart.addLineSeries({
         color: '#FFAB00',
@@ -347,10 +566,12 @@ function showEMA(emaData) {
       });
     }
     
-    const data26 = emaData.ema26.map(d => ({
-      time: Math.floor(new Date(d.time).getTime() / 1000),
-      value: d.value
-    }));
+    const data26 = indicators.ema26
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
     
     indicatorSeries.ema26.setData(data26);
   }
@@ -375,43 +596,234 @@ function hideEMA() {
  * Show Bollinger Bands
  */
 function showBollinger(bollingerData) {
-  // Implementation for Bollinger Bands
-  console.log('[Kline] Bollinger Bands display - implement based on your data structure');
+  if (!bollingerData) return;
+  
+  console.log('[Kline] Showing Bollinger Bands');
+  
+  // Upper band
+  if (bollingerData.upper) {
+    if (!indicatorSeries.bollingerUpper) {
+      indicatorSeries.bollingerUpper = chart.addLineSeries({
+        color: 'rgba(168, 85, 247, 0.5)',
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        title: 'BB Upper'
+      });
+    }
+    
+    const upperData = bollingerData.upper
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
+    
+    indicatorSeries.bollingerUpper.setData(upperData);
+  }
+  
+  // Middle band (SMA)
+  if (bollingerData.middle) {
+    if (!indicatorSeries.bollingerMiddle) {
+      indicatorSeries.bollingerMiddle = chart.addLineSeries({
+        color: 'rgba(168, 85, 247, 0.8)',
+        lineWidth: 2,
+        title: 'BB Middle'
+      });
+    }
+    
+    const middleData = bollingerData.middle
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
+    
+    indicatorSeries.bollingerMiddle.setData(middleData);
+  }
+  
+  // Lower band
+  if (bollingerData.lower) {
+    if (!indicatorSeries.bollingerLower) {
+      indicatorSeries.bollingerLower = chart.addLineSeries({
+        color: 'rgba(168, 85, 247, 0.5)',
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        title: 'BB Lower'
+      });
+    }
+    
+    const lowerData = bollingerData.lower
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
+    
+    indicatorSeries.bollingerLower.setData(lowerData);
+  }
 }
 
 /**
  * Hide Bollinger Bands
  */
 function hideBollinger() {
-  // Implementation for hiding Bollinger Bands
+  if (indicatorSeries.bollingerUpper) {
+    chart.removeSeries(indicatorSeries.bollingerUpper);
+    indicatorSeries.bollingerUpper = null;
+  }
+  
+  if (indicatorSeries.bollingerMiddle) {
+    chart.removeSeries(indicatorSeries.bollingerMiddle);
+    indicatorSeries.bollingerMiddle = null;
+  }
+  
+  if (indicatorSeries.bollingerLower) {
+    chart.removeSeries(indicatorSeries.bollingerLower);
+    indicatorSeries.bollingerLower = null;
+  }
 }
 
 /**
  * Show RSI indicator
  */
 function showRSI(rsiData) {
-  // Implementation for RSI
-  console.log('[Kline] RSI display - implement based on your data structure');
+  if (!rsiData) return;
+  
+  console.log('[Kline] Showing RSI');
+  
+  if (!indicatorSeries.rsi) {
+    indicatorSeries.rsi = chart.addLineSeries({
+      color: '#9333ea',
+      lineWidth: 2,
+      title: 'RSI (14)',
+      priceScaleId: 'rsi',
+      scaleMargins: {
+        top: 0.80,
+        bottom: 0.15,
+      }
+    });
+  }
+  
+  const data = rsiData
+    .filter(d => d.value !== null && d.value !== undefined)
+    .map(d => ({
+      time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+      value: d.value
+    }));
+  
+  indicatorSeries.rsi.setData(data);
 }
 
 /**
  * Hide RSI indicator
  */
 function hideRSI() {
-  // Implementation for hiding RSI
+  if (indicatorSeries.rsi) {
+    chart.removeSeries(indicatorSeries.rsi);
+    indicatorSeries.rsi = null;
+  }
 }
 
 /**
  * Show MACD indicator
  */
 function showMACD(macdData) {
-  // Implementation for MACD
-  console.log('[Kline] MACD display - implement based on your data structure');
+  if (!macdData) return;
+  
+  console.log('[Kline] Showing MACD');
+  
+  // MACD Line
+  if (macdData.macd) {
+    if (!indicatorSeries.macdLine) {
+      indicatorSeries.macdLine = chart.addLineSeries({
+        color: '#2962FF',
+        lineWidth: 2,
+        title: 'MACD',
+        priceScaleId: 'macd',
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        }
+      });
+    }
+    
+    const macdLineData = macdData.macd
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
+    
+    indicatorSeries.macdLine.setData(macdLineData);
+  }
+  
+  // Signal Line
+  if (macdData.signal) {
+    if (!indicatorSeries.macdSignal) {
+      indicatorSeries.macdSignal = chart.addLineSeries({
+        color: '#FF6D00',
+        lineWidth: 2,
+        title: 'Signal',
+        priceScaleId: 'macd',
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        }
+      });
+    }
+    
+    const signalData = macdData.signal
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value
+      }));
+    
+    indicatorSeries.macdSignal.setData(signalData);
+  }
+  
+  // Histogram
+  if (macdData.histogram) {
+    if (!indicatorSeries.macdHistogram) {
+      indicatorSeries.macdHistogram = chart.addHistogramSeries({
+        color: '#26a69a',
+        title: 'Histogram',
+        priceScaleId: 'macd',
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        }
+      });
+    }
+    
+    const histogramData = macdData.histogram
+      .filter(d => d.value !== null && d.value !== undefined)
+      .map(d => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value,
+        color: d.value >= 0 ? '#26a69a' : '#ef5350'
+      }));
+    
+    indicatorSeries.macdHistogram.setData(histogramData);
+  }
 }
 
 /**
  * Hide MACD indicator
  */
 function hideMACD() {
-  // Implementation for hiding MACD
+  if (indicatorSeries.macdLine) {
+    chart.removeSeries(indicatorSeries.macdLine);
+    indicatorSeries.macdLine = null;
+  }
+  
+  if (indicatorSeries.macdSignal) {
+    chart.removeSeries(indicatorSeries.macdSignal);
+    indicatorSeries.macdSignal = null;
+  }
+  
+  if (indicatorSeries.macdHistogram) {
+    chart.removeSeries(indicatorSeries.macdHistogram);
+    indicatorSeries.macdHistogram = null;
+  }
 }
