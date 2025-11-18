@@ -162,6 +162,22 @@ async function updateTradeCard(symbol) {
             symbolEl.textContent = symbol;
         }
         
+        // Fetch and update company name
+        try {
+            const searchResponse = await fetch(`https://phantom-stocks.onrender.com/api/trades/search?q=${symbol}`);
+            const searchResults = await searchResponse.json();
+            
+            if (searchResults && searchResults.length > 0) {
+                const stock = searchResults.find(s => s.symbol === symbol) || searchResults[0];
+                const nameEl = document.getElementById('tradeName');
+                if (nameEl && stock.name) {
+                    nameEl.textContent = stock.name;
+                }
+            }
+        } catch (nameError) {
+            console.warn('Could not fetch company name:', nameError);
+        }
+        
         // Check if user has holding
         const holdingsResponse = await fetch(`https://phantom-stocks.onrender.com/api/portfolio/holdings?user_id=${currentUser.id}`);
         const holdings = await holdingsResponse.json();
@@ -218,19 +234,26 @@ function setupEventListeners() {
         searchInput.addEventListener('input', async (e) => {
             const query = e.target.value.trim();
             
+            console.log('[Search] Query:', query);
+            
             if (query.length < 1) {
                 if (searchResults) searchResults.style.display = 'none';
                 return;
             }
             
             try {
-                const response = await fetch(`https://phantom-stocks.onrender.com/api/trades/search?q=${encodeURIComponent(query)}`);
+                const url = `https://phantom-stocks.onrender.com/api/trades/search?q=${encodeURIComponent(query)}`;
+                console.log('[Search] Fetching:', url);
+                
+                const response = await fetch(url);
                 const results = await response.json();
+                
+                console.log('[Search] Results:', results);
                 
                 if (results && results.length > 0 && searchResults) {
                     const html = results.slice(0, 5).map(stock => `
                         <div class="search-result-item" data-symbol="${stock.symbol}">
-                            <strong>${stock.name}</strong>
+                            <strong>${stock.name || stock.symbol}</strong>
                             <span class="stock-symbol">${stock.symbol}</span>
                         </div>
                     `).join('');
@@ -303,12 +326,16 @@ function setupEventListeners() {
         indicatorsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             indicatorsMenu.classList.toggle('show');
+            console.log('Indicators menu toggled');
         });
         
-        document.querySelectorAll('.dropdown-item[data-indicator]').forEach(item => {
+        // Use .indicator-item instead of .dropdown-item
+        document.querySelectorAll('.indicator-item[data-indicator]').forEach(item => {
             item.addEventListener('click', () => {
                 const indicator = item.dataset.indicator;
                 const isActive = activeIndicators.has(indicator);
+                
+                console.log(`Indicator ${indicator} clicked, active: ${isActive}`);
                 
                 if (isActive) {
                     activeIndicators.delete(indicator);
