@@ -106,16 +106,54 @@ async function loadChart(symbol, timeframe) {
 // Update trade card with current symbol info
 async function updateTradeCard(symbol) {
     try {
-        // Fetch current price from backend
-        const response = await fetch(`https://phantom-stocks.onrender.com/api/trades/prices?symbols=${symbol}`);
-        const prices = await response.json();
+        // Fetch full price data with OHLC from backend
+        const response = await fetch(`https://phantom-stocks.onrender.com/api/market-data/price?symbol=${symbol}`);
         
-        currentPrice = prices[symbol] || 0;
+        if (!response.ok) {
+            throw new Error('Failed to fetch price data');
+        }
+        
+        const priceData = await response.json();
+        
+        // Store current price
+        currentPrice = parseFloat(priceData.price) || parseFloat(priceData.close) || 0;
         
         // Update price display
         const priceEl = document.getElementById('currentPrice');
         if (priceEl) {
             priceEl.textContent = `$${currentPrice.toFixed(2)}`;
+        }
+        
+        // Update OHLC data
+        const openEl = document.getElementById('stockOpen');
+        if (openEl) {
+            openEl.textContent = `$${parseFloat(priceData.open || 0).toFixed(2)}`;
+        }
+        
+        const highEl = document.getElementById('stockHigh');
+        if (highEl) {
+            highEl.textContent = `$${parseFloat(priceData.high || 0).toFixed(2)}`;
+        }
+        
+        const lowEl = document.getElementById('stockLow');
+        if (lowEl) {
+            lowEl.textContent = `$${parseFloat(priceData.low || 0).toFixed(2)}`;
+        }
+        
+        const closeEl = document.getElementById('stockClose');
+        if (closeEl) {
+            closeEl.textContent = `$${parseFloat(priceData.close || currentPrice).toFixed(2)}`;
+        }
+        
+        // Update change display
+        const change = parseFloat(priceData.change || 0);
+        const changePercent = parseFloat(priceData.changePercent || 0);
+        
+        const changeEl = document.getElementById('stockChange');
+        if (changeEl) {
+            const sign = change >= 0 ? '+' : '';
+            changeEl.textContent = `${sign}$${change.toFixed(2)} (${sign}${changePercent.toFixed(2)}%)`;
+            changeEl.className = change >= 0 ? 'stock-change positive' : 'stock-change negative';
         }
         
         // Update symbol display
@@ -137,8 +175,24 @@ async function updateTradeCard(symbol) {
             holdingEl.textContent = `You own: ${currentHolding} shares`;
         }
         
+        // Update total calculation
+        updateTotal();
+        
     } catch (error) {
         console.error('Error updating trade card:', error);
+        showError('Failed to load stock data');
+    }
+}
+
+// Update total amount based on quantity
+function updateTotal() {
+    const quantityInput = document.getElementById('quantity');
+    const totalEl = document.getElementById('totalAmount');
+    
+    if (quantityInput && totalEl) {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const total = quantity * currentPrice;
+        totalEl.textContent = `$${total.toFixed(2)}`;
     }
 }
 
@@ -222,19 +276,19 @@ function setupEventListeners() {
     
     // Chart type dropdown
     const chartTypeBtn = document.getElementById('chartTypeBtn');
-    const chartTypeDropdown = document.getElementById('chartTypeDropdown');
+    const chartTypeMenu = document.getElementById('chartTypeMenu');
     
-    if (chartTypeBtn && chartTypeDropdown) {
+    if (chartTypeBtn && chartTypeMenu) {
         chartTypeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            chartTypeDropdown.classList.toggle('show');
+            chartTypeMenu.classList.toggle('show');
         });
         
         document.querySelectorAll('.dropdown-item[data-chart-type]').forEach(item => {
             item.addEventListener('click', () => {
                 const type = item.dataset.chartType;
                 currentChartType = type;
-                chartTypeDropdown.classList.remove('show');
+                chartTypeMenu.classList.remove('show');
                 // Chart type change would be implemented here
                 console.log(`Chart type changed to: ${type}`);
             });
@@ -243,12 +297,12 @@ function setupEventListeners() {
     
     // Indicators dropdown
     const indicatorsBtn = document.getElementById('indicatorsBtn');
-    const indicatorsDropdown = document.getElementById('indicatorsDropdown');
+    const indicatorsMenu = document.getElementById('indicatorsMenu');
     
-    if (indicatorsBtn && indicatorsDropdown) {
+    if (indicatorsBtn && indicatorsMenu) {
         indicatorsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            indicatorsDropdown.classList.toggle('show');
+            indicatorsMenu.classList.toggle('show');
         });
         
         document.querySelectorAll('.dropdown-item[data-indicator]').forEach(item => {
@@ -275,6 +329,12 @@ function setupEventListeners() {
             dropdown.classList.remove('show');
         });
     });
+    
+    // Quantity input - update total on change
+    const quantityInput = document.getElementById('quantity');
+    if (quantityInput) {
+        quantityInput.addEventListener('input', updateTotal);
+    }
     
     // Buy/Sell buttons
     const buyBtn = document.getElementById('buyBtn');
