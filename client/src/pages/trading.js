@@ -15,6 +15,39 @@ let portfolioData = null;
 let currentPrice = 0;
 let currentHolding = 0;
 
+// Show sliding notification (matches kline.js style)
+function showNotification(message) {
+    const existing = document.querySelector('.order-notification');
+    if (existing) {
+        existing.remove();
+    }
+    
+    const notification = document.createElement('div');
+    notification.className = 'order-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.95);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        z-index: 10000;
+        font-size: 14px;
+        font-weight: 300;
+        animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
 // Initialize page
 async function initializePage() {
     try {
@@ -70,7 +103,7 @@ function updateCashDisplay() {
     }
 }
 
-// Load chart
+// Load chart - SILENT (no success/error notifications)
 async function loadChart(symbol, timeframe) {
     try {
         console.log(`Loading chart: ${symbol} ${timeframe}`);
@@ -99,7 +132,8 @@ async function loadChart(symbol, timeframe) {
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay) loadingOverlay.style.display = 'none';
         
-        showError('Failed to load chart data');
+        // REMOVED: showError('Failed to load chart data');
+        // Silent failure - error logged to console only
     }
 }
 
@@ -196,7 +230,8 @@ async function updateTradeCard(symbol) {
         
     } catch (error) {
         console.error('Error updating trade card:', error);
-        showError('Failed to load stock data');
+        // REMOVED: showError('Failed to load stock data');
+        // Silent failure
     }
 }
 
@@ -306,6 +341,14 @@ function setupEventListeners() {
                 currentChartType = type;
                 chartTypeMenu.classList.remove('show');
                 
+                // Remove active from all items
+                document.querySelectorAll('.dropdown-item[data-chart-type]').forEach(i => {
+                    i.classList.remove('active');
+                });
+                
+                // Add active to clicked item
+                item.classList.add('active');
+                
                 // Update label
                 const label = document.getElementById('chartTypeLabel');
                 if (label) {
@@ -400,12 +443,16 @@ function setupEventListeners() {
     }
 }
 
-// Handle search
+// Handle search with validation
 async function handleSearch() {
     const searchInput = document.getElementById('searchInput');
     const query = searchInput?.value?.trim().toUpperCase();
     
-    if (!query) return;
+    // Validate input
+    if (!query || query.length === 0) {
+        showNotification('Please enter a valid stock symbol');
+        return;
+    }
     
     try {
         console.log(`Searching for: ${query}`);
@@ -419,11 +466,12 @@ async function handleSearch() {
         // Update trade card
         await updateTradeCard(currentSymbol);
         
-        showSuccess(`Loaded ${currentSymbol}`);
+        // REMOVED: showSuccess(`Loaded ${currentSymbol}`);
+        // Silent success
         
     } catch (error) {
         console.error('Search error:', error);
-        showError(`Could not find symbol: ${query}`);
+        showNotification(`Could not find symbol: ${query}`);
     }
 }
 
@@ -433,7 +481,7 @@ async function handleTrade(action) {
     const quantity = parseFloat(quantityInput?.value || 0);
     
     if (quantity <= 0) {
-        showError('Please enter a valid quantity');
+        showNotification('Please enter a valid quantity');
         return;
     }
     
@@ -441,12 +489,12 @@ async function handleTrade(action) {
     if (action === 'BUY') {
         const totalCost = quantity * currentPrice;
         if (totalCost > portfolioData.cash) {
-            showError(`Insufficient funds. Need $${totalCost.toFixed(2)}, have $${portfolioData.cash.toFixed(2)}`);
+            showNotification(`Insufficient funds. Need $${totalCost.toFixed(2)}, have $${portfolioData.cash.toFixed(2)}`);
             return;
         }
     } else if (action === 'SELL') {
         if (quantity > currentHolding) {
-            showError(`Insufficient shares. Trying to sell ${quantity}, have ${currentHolding}`);
+            showNotification(`Insufficient shares. Trying to sell ${quantity}, have ${currentHolding}`);
             return;
         }
     }
@@ -456,7 +504,7 @@ async function handleTrade(action) {
         
         const result = await executeTrade(currentUser.id, currentSymbol, action, quantity, currentPrice);
         
-        showSuccess(`${action} order executed: ${quantity} ${currentSymbol}`);
+        showNotification(`${action} order executed: ${quantity} ${currentSymbol}`);
         
         // Reload portfolio data
         await loadPortfolioData();
@@ -471,56 +519,8 @@ async function handleTrade(action) {
         
     } catch (error) {
         console.error('Trade execution error:', error);
-        showError(error.message || 'Trade failed');
+        showNotification(error.message || 'Trade failed');
     }
-}
-
-// Show success message
-function showSuccess(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification success';
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #10b981;
-        color: white;
-        padding: 16px 24px;
-        border-radius: 8px;
-        z-index: 1000;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
-}
-
-// Show error message
-function showError(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification error';
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #ef4444;
-        color: white;
-        padding: 16px 24px;
-        border-radius: 8px;
-        z-index: 1000;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
 }
 
 // Initialize when DOM is ready

@@ -181,7 +181,7 @@ export function changeChartType(type) {
         value: bar.close
       }));
       candlestickSeries.setData(lineData);
-      return;
+      break; // Don't return - fall through to end
       
     case 'baseline':
       candlestickSeries = chart.addSeries(BaselineSeries, {
@@ -198,12 +198,18 @@ export function changeChartType(type) {
         value: bar.close
       }));
       candlestickSeries.setData(baselineData);
-      return;
+      break; // Don't return - fall through to end
+      
+    default:
+      // For candlestick and bars, set data here
+      if (currentSeriesData && currentSeriesData.length > 0) {
+        candlestickSeries.setData(currentSeriesData);
+      }
+      break;
   }
   
-  if (currentSeriesData && currentSeriesData.length > 0) {
-    candlestickSeries.setData(currentSeriesData);
-  }
+  console.log(`[Kline] Chart type changed to ${type}`);
+}
 }
 
 /**
