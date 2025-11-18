@@ -15,6 +15,7 @@ import {
 let chart = null;
 let candlestickSeries = null;
 let currentData = null;
+let currentChartType = 'candlestick'; // Track current chart type
 let activeIndicators = {
   volume: false,
   sma: false,
@@ -256,6 +257,9 @@ export function changeChartType(type) {
       break;
   }
   
+  // Save the current chart type
+  currentChartType = type;
+  
   // Recreate overlay indicators
   if (wasSMAActive && currentData && currentData.indicators) {
     showSMA(currentData.indicators);
@@ -359,7 +363,18 @@ export async function loadChartData(symbol, timeframe) {
       close: parseFloat(bar.close)
     }));
     
-    candlestickSeries.setData(candleData);
+    // Set data based on current chart type
+    if (currentChartType === 'line' || currentChartType === 'baseline') {
+      // Convert to single value format for line/baseline
+      const singleValueData = candleData.map(bar => ({
+        time: bar.time,
+        value: bar.close
+      }));
+      candlestickSeries.setData(singleValueData);
+    } else {
+      // Use OHLC for candlestick/bars
+      candlestickSeries.setData(candleData);
+    }
     
     // Extract volume
     const volumeData = data.bars.map(bar => ({
