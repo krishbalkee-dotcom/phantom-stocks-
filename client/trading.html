@@ -82,6 +82,12 @@
       gap: 16px;
     }
 
+    .cash-label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+      font-weight: 300;
+    }
+
     .cash-display {
       color: #10b981;
       font-size: 14px;
@@ -91,6 +97,17 @@
     .username {
       color: #d1d5db;
       font-size: 14px;
+      font-weight: 300;
+    }
+
+    .toolbar-placeholder {
+      margin-left: 20px;
+    }
+
+    .coming-soon-text {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 13px;
+      font-style: italic;
       font-weight: 300;
     }
 
@@ -678,6 +695,7 @@
       <a href="courses.html" class="nav-link">Learn</a>
     </nav>
     <div class="user-section">
+      <span class="cash-label">Available to Trade:</span>
       <span class="cash-display" id="cashDisplay">$0.00</span>
       <span class="username" id="username">Loading...</span>
     </div>
@@ -754,6 +772,11 @@
           <div class="indicator-label">MACD</div>
         </div>
       </div>
+    </div>
+    
+    <!-- Drawing Tools Placeholder -->
+    <div class="toolbar-placeholder">
+      <span class="coming-soon-text">Drawing Tools Coming Soon!</span>
     </div>
   </div>
 

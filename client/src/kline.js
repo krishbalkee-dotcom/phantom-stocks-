@@ -148,6 +148,12 @@ export function changeChartType(type) {
     return;
   }
   
+  // Block chart switching if Volume, RSI, or MACD are active
+  if (activeIndicators.volume || activeIndicators.rsi || activeIndicators.macd) {
+    showNotification('Please disable Volume, RSI, and MACD before switching chart type');
+    return;
+  }
+  
   console.log(`[Kline] Changing chart type to: ${type}`);
   
   // Use ORIGINAL OHLC data from currentData
@@ -291,6 +297,7 @@ export function initChart(containerId) {
     width: container.clientWidth,
     height: container.clientHeight,
     layout: {
+      attributionLogo: false, // Remove TradingView watermark
       background: { color: '#0a0a0a' },
       textColor: '#d1d5db',
       panes: {
@@ -313,7 +320,7 @@ export function initChart(containerId) {
       borderColor: 'rgba(255, 255, 255, 0.1)',
       timeVisible: true,
       secondsVisible: false,
-      barSpacing: 12, // Wider bar spacing
+      barSpacing: 17, // Increased from 12 to 17
     },
   });
   

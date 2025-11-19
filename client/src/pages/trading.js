@@ -112,6 +112,15 @@ async function loadChart(symbol, timeframe) {
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay) loadingOverlay.style.display = 'flex';
         
+        // Fetch chart data to check metadata
+        const response = await fetch(`https://phantom-stocks.onrender.com/api/market-data/chart?symbol=${symbol}&timeframe=${timeframe}`);
+        const chartData = await response.json();
+        
+        // Check for limited data warning
+        if (chartData.metadata?.hasLimitedData) {
+            showNotification(`Limited trading data for ${symbol} (${chartData.metadata.barCount} bars)`);
+        }
+        
         await loadChartData(symbol, timeframe);
         
         // Hide loading
@@ -355,7 +364,6 @@ function setupEventListeners() {
                     const typeNames = {
                         'candlestick': 'Candlestick',
                         'bars': 'Bars',
-                        'line': 'Line',
                         'baseline': 'Baseline'
                     };
                     label.textContent = `Chart Type: ${typeNames[type] || type}`;
