@@ -284,7 +284,7 @@ export function changeChartType(type) {
 /**
  * Initialize chart
  */
-
+ 
 export function initChart(containerId) {
   const container = document.getElementById(containerId);
   
@@ -320,7 +320,7 @@ export function initChart(containerId) {
       borderColor: 'rgba(255, 255, 255, 0.1)',
       timeVisible: true,
       secondsVisible: false,
-      barSpacing: 25, // Increased from 12 to 17
+      barSpacing: 17, // Increased from 12 to 17
     },
   });
   

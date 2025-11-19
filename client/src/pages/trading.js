@@ -17,6 +17,32 @@ let currentHolding = 0;
 
 // Show sliding notification (matches kline.js style)
 function showNotification(message) {
+    // Add animation styles if not already present
+    if (!document.querySelector('style[data-notification-animations]')) {
+        const style = document.createElement('style');
+        style.setAttribute('data-notification-animations', 'true');
+        style.textContent = `
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            
+            @keyframes fadeOut {
+                to {
+                    opacity: 0;
+                    transform: translateX(400px);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
     const existing = document.querySelector('.order-notification');
     if (existing) {
         existing.remove();
@@ -118,7 +144,7 @@ async function loadChart(symbol, timeframe) {
         
         // Check for limited data warning
         if (chartData.metadata?.hasLimitedData) {
-            showNotification(`Limited trading data for ${symbol} (${chartData.metadata.barCount} bars)`);
+            showNotification(`Limited trading data for ${symbol} (${chartData.metadata.barCount} bars). Switch to Line/Baseline chart recommended`);
         }
         
         await loadChartData(symbol, timeframe);
