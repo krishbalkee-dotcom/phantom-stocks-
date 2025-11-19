@@ -240,23 +240,37 @@ router.get('/search', async (req, res) => {
         // Search Polygon API
         const results = await polygonService.searchTickers(q);
         
-        // Sort by relevance: exact match → starts with → contains
+        // Sort by relevance: name starts with → symbol starts with → name contains → alphabetical
         const sortedResults = results.sort((a, b) => {
             const aSymbol = a.symbol.toUpperCase();
             const bSymbol = b.symbol.toUpperCase();
+            const aName = (a.name || '').toUpperCase();
+            const bName = (b.name || '').toUpperCase();
             const queryUpper = q.toUpperCase();
             
-            // Exact match first
+            // Priority 1: Exact symbol match
             if (aSymbol === queryUpper) return -1;
             if (bSymbol === queryUpper) return 1;
             
-            // Starts with query second
-            const aStarts = aSymbol.startsWith(queryUpper);
-            const bStarts = bSymbol.startsWith(queryUpper);
-            if (aStarts && !bStarts) return -1;
-            if (bStarts && !aStarts) return 1;
+            // Priority 2: Company name STARTS with query (e.g., "NVID" → "NVIDIA")
+            const aNameStarts = aName.startsWith(queryUpper);
+            const bNameStarts = bName.startsWith(queryUpper);
+            if (aNameStarts && !bNameStarts) return -1;
+            if (bNameStarts && !aNameStarts) return 1;
             
-            // Then alphabetical
+            // Priority 3: Symbol STARTS with query (e.g., "NV" → "NVDA")
+            const aSymbolStarts = aSymbol.startsWith(queryUpper);
+            const bSymbolStarts = bSymbol.startsWith(queryUpper);
+            if (aSymbolStarts && !bSymbolStarts) return -1;
+            if (bSymbolStarts && !aSymbolStarts) return 1;
+            
+            // Priority 4: Company name CONTAINS query (e.g., "NVI" → "NVIDIA")
+            const aNameContains = aName.includes(queryUpper);
+            const bNameContains = bName.includes(queryUpper);
+            if (aNameContains && !bNameContains) return -1;
+            if (bNameContains && !aNameContains) return 1;
+            
+            // Priority 5: Alphabetical by symbol
             return aSymbol.localeCompare(bSymbol);
         });
         
