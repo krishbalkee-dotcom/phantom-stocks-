@@ -41,6 +41,15 @@ router.post('/execute', async (req, res) => {
         
         const totalAmount = quantity * price;
         
+        // Get company name from Polygon
+        let companyName = symbol;
+        try {
+            const details = await polygonService.getTickerDetails(symbol);
+            companyName = details.name || symbol;
+        } catch (e) {
+            console.warn('Could not fetch company name:', e.message);
+        }
+        
         // Handle BUY action
         if (action === 'BUY') {
             // Check if user has enough cash
@@ -79,12 +88,13 @@ router.post('/execute', async (req, res) => {
                     return res.status(500).json({ error: 'Failed to update holding' });
                 }
             } else {
-                // Create new holding
+                // Create new holding with company name
                 const { error: insertError } = await supabase
                     .from('holdings')
                     .insert({
                         user_id,
                         symbol,
+                        name: companyName,
                         quantity,
                         avg_purchase_price: price,
                         current_price: price,
@@ -178,15 +188,6 @@ router.post('/execute', async (req, res) => {
             }
         }
         
-        // Get company name from Polygon (optional, for better UX)
-        let companyName = symbol;
-        try {
-            const details = await polygonService.getTickerDetails(symbol);
-            companyName = details.name || symbol;
-        } catch (e) {
-            console.warn('Could not fetch company name:', e.message);
-        }
-        
         // Record transaction
         const { data: transaction, error: transactionError } = await supabase
             .from('transactions')
@@ -194,7 +195,7 @@ router.post('/execute', async (req, res) => {
                 user_id,
                 symbol,
                 company_name: companyName,
-                type: action, // Use 'type' column, not 'action'
+                type: action,
                 quantity,
                 price,
                 total_value: totalAmount
@@ -210,7 +211,8 @@ router.post('/execute', async (req, res) => {
         res.json({
             success: true,
             transaction,
-            message: `${action} order executed successfully`
+            message: `${action} order executed successfully`,
+            transactionAmount: action === 'BUY' ? -totalAmount : totalAmount
         });
         
     } catch (error) {
@@ -240,7 +242,7 @@ router.get('/search', async (req, res) => {
         // Search Polygon API
         const results = await polygonService.searchTickers(q);
         
-        // Sort by relevance: name starts with → symbol starts with → name contains → alphabetical
+        // Sort by relevance
         const sortedResults = results.sort((a, b) => {
             const aSymbol = a.symbol.toUpperCase();
             const bSymbol = b.symbol.toUpperCase();
@@ -248,35 +250,28 @@ router.get('/search', async (req, res) => {
             const bName = (b.name || '').toUpperCase();
             const queryUpper = q.toUpperCase();
             
-            // Priority 1: Exact symbol match
             if (aSymbol === queryUpper) return -1;
             if (bSymbol === queryUpper) return 1;
             
-            // Priority 2: Company name STARTS with query (e.g., "NVID" → "NVIDIA")
             const aNameStarts = aName.startsWith(queryUpper);
             const bNameStarts = bName.startsWith(queryUpper);
             if (aNameStarts && !bNameStarts) return -1;
             if (bNameStarts && !aNameStarts) return 1;
             
-            // Priority 3: Symbol STARTS with query (e.g., "NV" → "NVDA")
             const aSymbolStarts = aSymbol.startsWith(queryUpper);
             const bSymbolStarts = bSymbol.startsWith(queryUpper);
             if (aSymbolStarts && !bSymbolStarts) return -1;
             if (bSymbolStarts && !aSymbolStarts) return 1;
             
-            // Priority 4: Company name CONTAINS query (e.g., "NVI" → "NVIDIA")
             const aNameContains = aName.includes(queryUpper);
             const bNameContains = bName.includes(queryUpper);
             if (aNameContains && !bNameContains) return -1;
             if (bNameContains && !aNameContains) return 1;
             
-            // Priority 5: Alphabetical by symbol
             return aSymbol.localeCompare(bSymbol);
         });
         
-        // Cache results
         cacheService.cacheSearchResults(q, sortedResults);
-        
         res.json(sortedResults);
         
     } catch (error) {
@@ -302,7 +297,6 @@ router.get('/prices', async (req, res) => {
         const prices = {};
         const POLYGON_KEY = process.env.POLYGON_API_KEY;
         
-        // Fetch prices in parallel
         const promises = symbolArray.map(async (symbol) => {
             try {
                 const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
@@ -321,7 +315,6 @@ router.get('/prices', async (req, res) => {
         });
         
         await Promise.all(promises);
-        
         res.json(prices);
         
     } catch (error) {
