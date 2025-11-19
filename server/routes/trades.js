@@ -240,10 +240,30 @@ router.get('/search', async (req, res) => {
         // Search Polygon API
         const results = await polygonService.searchTickers(q);
         
-        // Cache results
-        cacheService.cacheSearchResults(q, results);
+        // Sort by relevance: exact match → starts with → contains
+        const sortedResults = results.sort((a, b) => {
+            const aSymbol = a.symbol.toUpperCase();
+            const bSymbol = b.symbol.toUpperCase();
+            const queryUpper = q.toUpperCase();
+            
+            // Exact match first
+            if (aSymbol === queryUpper) return -1;
+            if (bSymbol === queryUpper) return 1;
+            
+            // Starts with query second
+            const aStarts = aSymbol.startsWith(queryUpper);
+            const bStarts = bSymbol.startsWith(queryUpper);
+            if (aStarts && !bStarts) return -1;
+            if (bStarts && !aStarts) return 1;
+            
+            // Then alphabetical
+            return aSymbol.localeCompare(bSymbol);
+        });
         
-        res.json(results);
+        // Cache results
+        cacheService.cacheSearchResults(q, sortedResults);
+        
+        res.json(sortedResults);
         
     } catch (error) {
         console.error('Error searching tickers:', error);

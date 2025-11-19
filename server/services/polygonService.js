@@ -220,7 +220,7 @@ class PolygonService {
      * @param {number} bars - Number of bars to fetch (default: 1000)
      * @returns {Object} From and to dates
      */
-    calculateDateRange(timeframe, bars = 1000) {
+    calculateDateRange(timeframe, bars = 3000) {
         const now = new Date();
         let minutesBack;
         

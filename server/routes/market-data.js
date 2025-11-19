@@ -56,11 +56,18 @@ router.get('/chart', async (req, res) => {
             return res.json(cachedChart);
         }
         
-        // Calculate date range (1000 bars)
-        const { from, to } = polygonService.calculateDateRange(timeframe, 1000);
+        // Calculate date range (3000 bars)
+        const { from, to } = polygonService.calculateDateRange(timeframe, 3000);
         
         // Fetch from Polygon
-        const ohlcvData = await polygonService.getAggregates(symbol, timeframe, from, to);
+        let ohlcvData = await polygonService.getAggregates(symbol, timeframe, from, to);
+        
+        // Retry with extended range if insufficient data
+        if (ohlcvData.length < 500) {
+            console.log(`[Retry] Only ${ohlcvData.length} bars for ${symbol}, trying extended range...`);
+            const { from: extendedFrom, to: extendedTo } = polygonService.calculateDateRange(timeframe, 6000);
+            ohlcvData = await polygonService.getAggregates(symbol, timeframe, extendedFrom, extendedTo);
+        }
         
         if (!ohlcvData || ohlcvData.length === 0) {
             return res.status(404).json({ error: 'No data available for this symbol' });
@@ -69,7 +76,7 @@ router.get('/chart', async (req, res) => {
         // Calculate indicators
         const indicators = indicatorService.calculateAllIndicators(ohlcvData);
         
-        // Prepare response
+        // Prepare response with warning flag
         const chartData = {
             symbol,
             timeframe,
@@ -87,12 +94,13 @@ router.get('/chart', async (req, res) => {
                 barCount: ohlcvData.length,
                 from,
                 to,
-                latestPrice: ohlcvData[ohlcvData.length - 1].close
+                latestPrice: ohlcvData[ohlcvData.length - 1].close,
+                hasLimitedData: ohlcvData.length < 500 // Warning flag for frontend
             }
         };
         
-        // Cache for 15 minutes
-        cacheService.cacheChartData(symbol, timeframe, chartData, 15 * 60000);
+        // Cache for 30 minutes
+        cacheService.cacheChartData(symbol, timeframe, chartData, 30 * 60000);
         
         res.json(chartData);
         
