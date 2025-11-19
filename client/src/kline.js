@@ -415,7 +415,17 @@ export async function loadChartData(symbol, timeframe) {
       showMACD(data.indicators.macd);
     }
     
-    chart.timeScale().fitContent();
+    // Set visible range to last 200 bars for proper spacing
+    if (candleData.length > 0) {
+      const lastBar = candleData[candleData.length - 1];
+      const firstVisibleIndex = Math.max(0, candleData.length - 200);
+      const firstVisibleBar = candleData[firstVisibleIndex];
+      
+      chart.timeScale().setVisibleRange({
+        from: firstVisibleBar.time,
+        to: lastBar.time
+      });
+    }
     
     console.log(`[Kline] Loaded ${candleData.length} bars`);
     
