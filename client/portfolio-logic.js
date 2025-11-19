@@ -103,16 +103,21 @@ function updateUserInfo() {
     if (hour >= 12 && hour < 17) greeting = 'Good Afternoon';
     if (hour >= 17) greeting = 'Good Evening';
     
-    document.getElementById('welcomeMessage').textContent = `${greeting}, ${firstName}`;
+    const welcomeEl = document.getElementById('welcomeMessage');
+    if (welcomeEl) {
+        welcomeEl.textContent = `${greeting}, ${firstName}`;
+    }
     
     // Update avatar
-    document.getElementById('userAvatar').textContent = firstName.charAt(0).toUpperCase();
+    const avatarEl = document.getElementById('userAvatar');
+    if (avatarEl) {
+        avatarEl.textContent = firstName.charAt(0).toUpperCase();
+    }
 }
 
 // Render entire portfolio
 function renderPortfolio() {
     updateCashDisplay();
-    updatePortfolioValue();
     updateTransactionsList();
     renderPerformanceChart();
     renderAssetAllocationChart();
@@ -121,53 +126,26 @@ function renderPortfolio() {
 // Update available cash display
 function updateCashDisplay() {
     const cash = portfolioData?.cash || 0;
-    document.getElementById('availableCash').textContent = `$${cash.toLocaleString('en-US', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-    })}`;
-}
-
-// Update total portfolio value and change
-function updatePortfolioValue() {
-    const totalValue = portfolioData?.total_value || 0;
-    const initialValue = 10000;
-    const change = totalValue - initialValue;
-    const changePercent = ((change / initialValue) * 100);
+    const cashEl = document.getElementById('availableCash');
     
-    // Update total value
-    const totalValueEl = document.getElementById('totalPortfolioValue');
-    if (totalValueEl) {
-        totalValueEl.textContent = `$${totalValue.toLocaleString('en-US', { 
+    if (cashEl) {
+        cashEl.textContent = `$${cash.toLocaleString('en-US', { 
             minimumFractionDigits: 2, 
             maximumFractionDigits: 2 
         })}`;
     } else {
-        console.warn('Element "totalPortfolioValue" not found');
-    }
-    
-    // Update change display
-    const changeElement = document.getElementById('portfolioChange');
-    if (!changeElement) {
-        console.warn('Element "portfolioChange" not found');
-        return;
-    }
-    
-    if (Math.abs(change) < 0.01) {
-        changeElement.textContent = 'No change yet';
-        changeElement.className = 'profit-change';
-    } else {
-        const sign = change >= 0 ? '+' : '';
-        changeElement.textContent = `${sign}$${change.toLocaleString('en-US', { 
-            minimumFractionDigits: 2, 
-            maximumFractionDigits: 2 
-        })} (${sign}${changePercent.toFixed(2)}%)`;
-        changeElement.className = `profit-change ${change >= 0 ? 'positive' : 'negative'}`;
+        console.warn('Element "availableCash" not found');
     }
 }
 
 // Update transactions list
 function updateTransactionsList() {
     const container = document.getElementById('transactionsList');
+    
+    if (!container) {
+        console.warn('Element "transactionsList" not found');
+        return;
+    }
     
     if (!transactionsData || transactionsData.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">No transactions yet - start trading to see your activity</p>';
@@ -179,21 +157,27 @@ function updateTransactionsList() {
     
     container.innerHTML = `
         <div class="transaction-table">
-            ${recentTransactions.map(tx => `
-                <div class="transaction-row">
-                    <div class="transaction-name">
-                        <h4>${tx.symbol}</h4>
-                        <p>${tx.company_name || tx.symbol}</p>
+            ${recentTransactions.map(tx => {
+                // Get transaction type safely with null check
+                const txType = (tx.type || tx.action || 'UNKNOWN').toUpperCase();
+                const actionClass = txType === 'BUY' ? 'buy' : txType === 'SELL' ? 'sell' : '';
+                
+                return `
+                    <div class="transaction-row">
+                        <div class="transaction-name">
+                            <h4>${tx.symbol || 'N/A'}</h4>
+                            <p>${tx.company_name || tx.symbol || 'Unknown'}</p>
+                        </div>
+                        <div class="transaction-action ${actionClass}">${txType}</div>
+                        <div>${tx.quantity || 0} shares</div>
+                        <div>$${parseFloat(tx.price || 0).toFixed(2)}</div>
+                        <div>$${parseFloat(tx.total_amount || tx.total_value || 0).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: #9ca3af;">
+                            ${new Date(tx.created_at || tx.executed_at || Date.now()).toLocaleDateString()}
+                        </div>
                     </div>
-                    <div class="transaction-action ${tx.action.toLowerCase()}">${tx.action}</div>
-                    <div>${tx.quantity} shares</div>
-                    <div>$${parseFloat(tx.price).toFixed(2)}</div>
-                    <div>$${parseFloat(tx.total_amount || tx.total_value).toFixed(2)}</div>
-                    <div style="font-size: 0.7rem; color: #9ca3af;">
-                        ${new Date(tx.created_at || tx.executed_at).toLocaleDateString()}
-                    </div>
-                </div>
-            `).join('')}
+                `;
+            }).join('')}
         </div>
     `;
 }
@@ -201,6 +185,12 @@ function updateTransactionsList() {
 // Render performance chart (SVG-based)
 function renderPerformanceChart() {
     const svg = document.getElementById('chartSvg');
+    
+    if (!svg) {
+        console.warn('Element "chartSvg" not found');
+        return;
+    }
+    
     const width = 800;
     const height = 220;
     const padding = { top: 20, right: 20, bottom: 30, left: 50 };
@@ -274,6 +264,11 @@ function renderPerformanceChart() {
 function renderAssetAllocationChart() {
     const canvas = document.getElementById('assetAllocationChart');
     const legendContainer = document.getElementById('assetAllocationLegend');
+    
+    if (!canvas || !legendContainer) {
+        console.warn('Asset allocation chart elements not found');
+        return;
+    }
     
     // Destroy existing chart
     if (assetAllocationChart) {
@@ -380,40 +375,71 @@ function setupEventListeners() {
     });
     
     // News button
-    document.getElementById('newsBtn').addEventListener('click', openNewsModal);
+    const newsBtn = document.getElementById('newsBtn');
+    if (newsBtn) {
+        newsBtn.addEventListener('click', openNewsModal);
+    }
     
     // User avatar click - open account settings
-    document.getElementById('userAvatar').addEventListener('click', openAccountSettings);
+    const userAvatar = document.getElementById('userAvatar');
+    if (userAvatar) {
+        userAvatar.addEventListener('click', openAccountSettings);
+    }
     
     // Portfolio summary button
-    document.getElementById('portfolioSummaryBtn').addEventListener('click', openPortfolioSummary);
+    const summaryBtn = document.getElementById('portfolioSummaryBtn');
+    if (summaryBtn) {
+        summaryBtn.addEventListener('click', openPortfolioSummary);
+    }
     
     // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
     
     // Change password button
-    document.getElementById('changePasswordBtn').addEventListener('click', handleChangePassword);
+    const changePwBtn = document.getElementById('changePasswordBtn');
+    if (changePwBtn) {
+        changePwBtn.addEventListener('click', handleChangePassword);
+    }
 }
 
 // Open account settings modal
 async function openAccountSettings() {
     const modal = document.getElementById('accountModal');
     
+    if (!modal) {
+        console.warn('Account modal not found');
+        return;
+    }
+    
     // Populate user info
-    document.getElementById('currentEmail').value = currentUser.email;
+    const emailEl = document.getElementById('currentEmail');
+    if (emailEl) {
+        emailEl.value = currentUser.email;
+    }
     
     const { user_metadata } = currentUser;
     const username = user_metadata?.username || currentUser.email.split('@')[0];
-    document.getElementById('currentUsername').value = username;
+    
+    const usernameEl = document.getElementById('currentUsername');
+    if (usernameEl) {
+        usernameEl.value = username;
+    }
     
     // Clear password fields
-    document.getElementById('currentPassword').value = '';
-    document.getElementById('newPassword').value = '';
-    document.getElementById('confirmNewPassword').value = '';
+    const fields = ['currentPassword', 'newPassword', 'confirmNewPassword'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
     
     // Hide messages
-    document.getElementById('passwordError').classList.remove('show');
-    document.getElementById('passwordSuccess').classList.remove('show');
+    const errorEl = document.getElementById('passwordError');
+    const successEl = document.getElementById('passwordSuccess');
+    if (errorEl) errorEl.classList.remove('show');
+    if (successEl) successEl.classList.remove('show');
     
     modal.classList.add('show');
 }
@@ -422,6 +448,11 @@ async function openAccountSettings() {
 async function openNewsModal() {
     const modal = document.getElementById('newsModal');
     const newsList = document.getElementById('newsList');
+    
+    if (!modal || !newsList) {
+        console.warn('News modal elements not found');
+        return;
+    }
     
     newsList.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 2rem;">Loading news...</p>';
     modal.classList.add('show');
@@ -455,6 +486,11 @@ async function openNewsModal() {
 function openPortfolioSummary() {
     const modal = document.getElementById('portfolioSummaryModal');
     const content = document.getElementById('portfolioSummaryContent');
+    
+    if (!modal || !content) {
+        console.warn('Portfolio summary modal elements not found');
+        return;
+    }
     
     const totalValue = portfolioData?.total_value || 0;
     const cash = portfolioData?.cash || 0;
@@ -499,12 +535,17 @@ function openPortfolioSummary() {
 
 // Handle password change
 async function handleChangePassword() {
-    const currentPassword = document.getElementById('currentPassword').value;
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmNewPassword').value;
+    const currentPassword = document.getElementById('currentPassword')?.value;
+    const newPassword = document.getElementById('newPassword')?.value;
+    const confirmPassword = document.getElementById('confirmNewPassword')?.value;
     
     const errorDiv = document.getElementById('passwordError');
     const successDiv = document.getElementById('passwordSuccess');
+    
+    if (!errorDiv || !successDiv) {
+        console.warn('Password message elements not found');
+        return;
+    }
     
     // Hide previous messages
     errorDiv.classList.remove('show');
@@ -530,8 +571,10 @@ async function handleChangePassword() {
     }
     
     const btn = document.getElementById('changePasswordBtn');
-    btn.disabled = true;
-    btn.textContent = 'Updating...';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Updating...';
+    }
     
     try {
         // First, verify current password by attempting to sign in
@@ -558,19 +601,26 @@ async function handleChangePassword() {
         successDiv.classList.add('show');
         
         // Clear form
-        document.getElementById('currentPassword').value = '';
-        document.getElementById('newPassword').value = '';
-        document.getElementById('confirmNewPassword').value = '';
+        const fields = ['currentPassword', 'newPassword', 'confirmNewPassword'];
+        fields.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         
-        btn.disabled = false;
-        btn.textContent = 'Update Password';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Update Password';
+        }
         
     } catch (error) {
         console.error('Error changing password:', error);
         errorDiv.textContent = error.message || 'Failed to update password';
         errorDiv.classList.add('show');
-        btn.disabled = false;
-        btn.textContent = 'Update Password';
+        
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Update Password';
+        }
     }
 }
 
@@ -586,7 +636,10 @@ async function handleLogout() {
 
 // Close modal
 window.closeModal = function(modalId) {
-    document.getElementById(modalId).classList.remove('show');
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('show');
+    }
 };
 
 // Close modal when clicking outside
@@ -596,7 +649,6 @@ window.addEventListener('click', (e) => {
     }
 });
 
-// Initialize on page load
 // Initialize once when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initializePage();
