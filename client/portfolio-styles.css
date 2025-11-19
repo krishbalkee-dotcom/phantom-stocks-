@@ -564,6 +564,60 @@ body {
     color: #f9fafb;
 }
 
+/* Portfolio Summary Modal - Larger size */
+#portfolioSummaryModal .modal-content {
+    max-width: 1000px;
+    max-height: 85vh;
+}
+
+/* Transaction period dropdown styling */
+#transactionPeriod {
+    padding: 0.25rem 0.5rem;
+    background: rgba(55, 65, 81, 0.3);
+    border: 1px solid rgba(55, 65, 81, 0.5);
+    border-radius: 4px;
+    color: #f9fafb;
+    font-size: 0.75rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#transactionPeriod:hover {
+    background: rgba(55, 65, 81, 0.4);
+    border-color: rgba(55, 65, 81, 0.7);
+}
+
+#transactionPeriod:focus {
+    outline: none;
+    border-color: #a855f7;
+}
+
+/* Portfolio performance header styles */
+.portfolio-performance-header {
+    margin-top: 0.75rem;
+}
+
+/* Scrollbar styling for modal tables */
+#portfolioSummaryContent table::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+#portfolioSummaryContent table::-webkit-scrollbar-track {
+    background: rgba(55, 65, 81, 0.2);
+    border-radius: 4px;
+}
+
+#portfolioSummaryContent table::-webkit-scrollbar-thumb {
+    background: rgba(168, 85, 247, 0.3);
+    border-radius: 4px;
+}
+
+#portfolioSummaryContent table::-webkit-scrollbar-thumb:hover {
+    background: rgba(168, 85, 247, 0.5);
+}
+
 /* Settings */
 .settings-group {
     margin-bottom: 1.5rem;

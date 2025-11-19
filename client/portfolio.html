@@ -94,22 +94,30 @@
                             </div>
                         </div>
                         
-                        <!-- Latest Transactions -->
-                        <div class="card latest-transactions-card">
-                            <div class="card-header">
-                                <div>
-                                    <div class="card-title">Latest Transactions</div>
-                                    <div class="card-subtitle">Your recent trading activity</div>
-                                </div>
-                                <button class="btn btn-ghost">
-                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                                </button>
-                            </div>
-                            <div id="transactionsList">
-                                <p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">No transactions yet - start trading to see your activity</p>
-                            </div>
-                        </div>
-                    </div>
+                        
+<!-- Latest Transactions -->
+<div class="card latest-transactions-card">
+    <div class="card-header">
+        <div>
+            <div class="card-title">Transactions</div>
+            <div class="card-subtitle">Your trading history</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label style="font-size: 0.75rem; color: #9ca3af;">Time Period:</label>
+            <select id="transactionPeriod" style="padding: 0.25rem 0.5rem; background: rgba(55, 65, 81, 0.3); border: 1px solid rgba(55, 65, 81, 0.5); border-radius: 4px; color: #f9fafb; font-size: 0.75rem; font-family: inherit; cursor: pointer;">
+                <option value="5">Past 5 days</option>
+                <option value="10" selected>Past 10 days</option>
+                <option value="25">Past 25 days</option>
+                <option value="50">Past 50 days</option>
+                <option value="100">Past 100 days</option>
+            </select>
+        </div>
+    </div>
+    <div id="transactionsList">
+        <p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">Loading transactions...</p>
+    </div>
+</div>
+                    
                     
                     <!-- Right Column -->
                     <div class="right-column">
