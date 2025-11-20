@@ -259,6 +259,14 @@ function updateTransactionsList(days = 10) {
     
     container.innerHTML = `
         <div class="transaction-table">
+            <div class="transaction-header">
+                <div>Stock Name</div>
+                <div>Order Type</div>
+                <div>Quantity</div>
+                <div>Price/Share</div>
+                <div>Total Price</div>
+                <div>Date & Time</div>
+            </div>
             ${displayTransactions.map(tx => {
                 const txType = (tx.type || tx.action || 'UNKNOWN').toUpperCase();
                 const actionClass = txType === 'BUY' ? 'buy' : txType === 'SELL' ? 'sell' : '';
@@ -484,20 +492,21 @@ function renderPerformanceHeader() {
     }
     
     const totalValue = portfolioData?.total_value || 10000;
-    const todayChange = portfolioData?.today_profit_loss || 0;
-    const todayChangePercent = portfolioData?.today_profit_loss_percent || 0;
+    // Use Intraday G/L (total_profit_loss) for immediate feedback on new positions
+    const intradayChange = portfolioData?.total_profit_loss || 0;
+    const intradayChangePercent = portfolioData?.total_profit_loss_percent || 0;
     
     // Color logic: green for positive, purple for zero, red for negative
     let color;
-    if (todayChange > 0) {
+    if (intradayChange > 0) {
         color = '#22c55e'; // Green
-    } else if (todayChange < 0) {
+    } else if (intradayChange < 0) {
         color = '#ef4444'; // Red
     } else {
         color = '#a855f7'; // Purple for zero
     }
     
-    const arrow = todayChange > 0 ? '↗' : todayChange < 0 ? '↘' : '→';
+    const arrow = intradayChange > 0 ? '↗' : intradayChange < 0 ? '↘' : '→';
     
     const headerDiv = document.createElement('div');
     headerDiv.className = 'portfolio-performance-header';
@@ -507,8 +516,8 @@ function renderPerformanceHeader() {
             $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
         <div class="today-change" style="color: ${color};">
-            ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-            (${todayChange > 0 ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
+            ${arrow} $${Math.abs(intradayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+            (${intradayChange > 0 ? '+' : ''}${intradayChangePercent.toFixed(2)}%) today
         </div>
     `;
     
@@ -732,27 +741,43 @@ async function openPortfolioSummary() {
     const unrealizedGains = totalValue - 10000;
     const unrealizedGainsPercent = ((unrealizedGains / 10000) * 100).toFixed(2);
     
-    // Color logic for unrealized gains: green for positive, purple for zero, red for negative
+    // Color logic for unrealized gains
     let unrealizedColor;
     if (unrealizedGains > 0) {
         unrealizedColor = '#22c55e';
     } else if (unrealizedGains < 0) {
         unrealizedColor = '#ef4444';
     } else {
-        unrealizedColor = '#a855f7'; // Purple for zero
+        unrealizedColor = '#a855f7';
     }
     
-    // Color logic: green for positive, purple for zero, red for negative
+    // Color logic for today's change
     let todayColor;
     if (todayChange > 0) {
         todayColor = '#22c55e';
     } else if (todayChange < 0) {
         todayColor = '#ef4444';
     } else {
-        todayColor = '#a855f7'; // Purple for zero
+        todayColor = '#a855f7';
     }
     
     const arrow = todayChange > 0 ? '↗' : todayChange < 0 ? '↘' : '→';
+    
+    // Helper function to format G/L with proper handling of null values
+    const formatGL = (value, percent, isNewPosition = false, label = '') => {
+        if (value === null || value === undefined) {
+            return `<span style="color: #6b7280; font-size: 0.7rem;">${isNewPosition ? label : 'N/A'}</span>`;
+        }
+        const color = value > 0 ? '#22c55e' : value < 0 ? '#ef4444' : '#a855f7';
+        return `
+            <span style="color: ${color};">
+                ${value > 0 ? '+' : ''}$${Math.abs(value).toFixed(2)}
+            </span>
+            <div style="font-size: 0.7rem; color: ${color};">
+                ${percent > 0 ? '+' : ''}${percent.toFixed(2)}%
+            </div>
+        `;
+    };
     
     content.innerHTML = `
         <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
@@ -785,33 +810,48 @@ async function openPortfolioSummary() {
         
         ${holdingsData.length > 0 ? `
         <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+            <table id="portfolioTable" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
                 <thead style="position: sticky; top: 0; background: #000; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
                     <tr>
-                        <th style="padding: 0.75rem; text-align: left; color: #9ca3af; font-weight: 400;">Symbol</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Last Price</th>
+                        <th class="sortable" data-sort="symbol" style="padding: 0.75rem; text-align: left; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Symbol <span class="sort-indicator">↕</span>
+                        </th>
+                        <th class="sortable" data-sort="price_bought" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Price Bought <span class="sort-indicator">↕</span>
+                        </th>
+                        <th class="sortable" data-sort="current_price" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Last Price <span class="sort-indicator">↕</span>
+                        </th>
                         <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
-                            Intraday G/L
+                            Day's Range
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Low - High</div>
+                        </th>
+                        <th class="sortable" data-sort="portfolio_pct" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            % Portfolio <span class="sort-indicator">↕</span>
+                        </th>
+                        <th class="sortable" data-sort="intraday" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Intraday G/L <span class="sort-indicator">↕</span>
                             <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Purchase</div>
                         </th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
-                            Recent Change
+                        <th class="sortable" data-sort="recent" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Recent Change <span class="sort-indicator">↕</span>
                             <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Last 30min</div>
                         </th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
-                            Today G/L
+                        <th class="sortable" data-sort="today" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Today G/L <span class="sort-indicator">↕</span>
                             <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Market Open</div>
                         </th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
-                            Total G/L
+                        <th class="sortable" data-sort="total" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Total G/L <span class="sort-indicator">↕</span>
                             <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Overall P&L</div>
                         </th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Quantity</th>
+                        <th class="sortable" data-sort="quantity" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                            Quantity <span class="sort-indicator">↕</span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     ${holdingsData.map(holding => {
-                        // Get all four G/L metrics
                         const intradayGL = holding.intraday_gain_loss;
                         const intradayGLPercent = holding.intraday_gain_loss_percent;
                         const recentChange = holding.most_recent_change;
@@ -820,31 +860,38 @@ async function openPortfolioSummary() {
                         const todayGLPercent = holding.today_gain_loss_percent;
                         const totalGL = holding.total_profit_loss;
                         const totalGLPercent = holding.total_profit_loss_percent;
-                        
-                        // Helper function to format G/L with proper handling of null values
-                        const formatGL = (value, percent, isNewPosition = false, label = '') => {
-                            if (value === null || value === undefined) {
-                                return `<span style="color: #6b7280; font-size: 0.7rem;">${isNewPosition ? label : 'N/A'}</span>`;
-                            }
-                            const color = value > 0 ? '#22c55e' : value < 0 ? '#ef4444' : '#a855f7';
-                            return `
-                                <span style="color: ${color};">
-                                    ${value > 0 ? '+' : ''}$${Math.abs(value).toFixed(2)}
-                                </span>
-                                <div style="font-size: 0.7rem; color: ${color};">
-                                    ${percent > 0 ? '+' : ''}${percent.toFixed(2)}%
-                                </div>
-                            `;
-                        };
+                        const portfolioPct = holding.portfolio_percentage || 0;
+                        const dayHigh = holding.today_high;
+                        const dayLow = holding.today_low;
                         
                         return `
-                            <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);">
+                            <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);"
+                                data-symbol="${holding.symbol}"
+                                data-price-bought="${holding.avg_purchase_price}"
+                                data-current-price="${holding.current_price}"
+                                data-portfolio-pct="${portfolioPct}"
+                                data-intraday="${intradayGL || 0}"
+                                data-recent="${recentChange || 0}"
+                                data-today="${todayGL || 0}"
+                                data-total="${totalGL || 0}"
+                                data-quantity="${holding.quantity}">
                                 <td style="padding: 0.75rem;">
                                     <div style="font-weight: 400;">${holding.symbol}</div>
                                     <div style="font-size: 0.7rem; color: #9ca3af;">${holding.name || holding.symbol}</div>
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right;">
+                                    $${parseFloat(holding.avg_purchase_price || 0).toFixed(2)}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right;">
                                     $${parseFloat(holding.current_price || 0).toFixed(2)}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; font-size: 0.75rem;">
+                                    ${dayLow && dayHigh ? 
+                                        `$${dayLow.toFixed(2)} - $${dayHigh.toFixed(2)}` : 
+                                        '<span style="color: #6b7280;">N/A</span>'}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${portfolioPct.toFixed(2)}%
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right;">
                                     ${formatGL(intradayGL, intradayGLPercent)}
@@ -870,7 +917,66 @@ async function openPortfolioSummary() {
         ` : '<p style="text-align: center; color: #9ca3af; padding: 2rem;">No positions yet</p>'}
     `;
     
+    // Add sorting functionality
+    if (holdingsData.length > 0) {
+        addTableSorting();
+    }
+    
     modal.classList.add('show');
+}
+
+// Add table sorting functionality
+function addTableSorting() {
+    const headers = document.querySelectorAll('#portfolioTable .sortable');
+    let currentSort = { column: null, ascending: true };
+    
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            const sortKey = header.dataset.sort;
+            const tbody = document.querySelector('#portfolioTable tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Toggle sort direction if clicking same column
+            if (currentSort.column === sortKey) {
+                currentSort.ascending = !currentSort.ascending;
+            } else {
+                currentSort.column = sortKey;
+                currentSort.ascending = true;
+            }
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal, bVal;
+                
+                if (sortKey === 'symbol') {
+                    aVal = a.dataset.symbol;
+                    bVal = b.dataset.symbol;
+                    return currentSort.ascending ? 
+                        aVal.localeCompare(bVal) : 
+                        bVal.localeCompare(aVal);
+                } else {
+                    aVal = parseFloat(a.dataset[sortKey.replace('_', '')]) || 0;
+                    bVal = parseFloat(b.dataset[sortKey.replace('_', '')]) || 0;
+                    return currentSort.ascending ? aVal - bVal : bVal - aVal;
+                }
+            });
+            
+            // Re-append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // Update sort indicators
+            headers.forEach(h => {
+                const indicator = h.querySelector('.sort-indicator');
+                if (h === header) {
+                    indicator.textContent = currentSort.ascending ? '↑' : '↓';
+                    indicator.style.color = '#a855f7';
+                } else {
+                    indicator.textContent = '↕';
+                    indicator.style.color = '#6b7280';
+                }
+            });
+        });
+    });
 }
 
 // Handle password change
