@@ -1,6 +1,6 @@
 /**
  * Authentication Service
- * Handles user signup, login, password reset
+ * Handles user signup and login (no email confirmation required)
  */
 
 import { supabase } from './supabaseClient.js';
@@ -10,17 +10,30 @@ import { redirectToIntendedPage } from './authGuard.js';
  * Sign up new user
  * Creates auth user + user_profiles entry with $10,000 starting balance
  */
-export async function signUp(email, password, username) {
+export async function signUp(email, password, username, birthday) {
   try {
     console.log('[Auth] Signing up user:', email);
     
     // Validate inputs
-    if (!email || !password || !username) {
+    if (!email || !password || !username || !birthday) {
       throw new Error('All fields are required');
     }
     
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
+    // Validate password strength
+    if (password.length < 8) {
+      throw new Error('Password must be at least 8 characters');
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+      throw new Error('Password must contain at least one uppercase letter');
+    }
+    
+    if (!/[a-z]/.test(password)) {
+      throw new Error('Password must contain at least one lowercase letter');
+    }
+    
+    if (!/[0-9]/.test(password)) {
+      throw new Error('Password must contain at least one number');
     }
     
     // Validate email format
@@ -29,19 +42,44 @@ export async function signUp(email, password, username) {
       throw new Error('Please enter a valid email address');
     }
     
-    // Create auth user
+    // Validate age (must be at least 10 years old)
+    const birthDate = new Date(birthday);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    if (age < 10) {
+      throw new Error('You must be at least 10 years old to use Phantom Stocks');
+    }
+    
+    // Create auth user (with email confirmation disabled)
     const { data, error } = await supabase.auth.signUp({
       email: email,
       password: password,
       options: {
         data: {
-          username: username
-        }
+          username: username,
+          birthday: birthday
+        },
+        emailRedirectTo: undefined // No email confirmation
       }
     });
     
     if (error) {
       console.error('[Auth] Signup error:', error);
+      
+      // Handle specific error messages
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        throw new Error('This email is already registered');
+      } else if (error.message.includes('Invalid email')) {
+        throw new Error('Please enter a valid email address');
+      } else if (error.message.includes('weak password')) {
+        throw new Error('Password too weak - must be 8+ characters with uppercase, lowercase, and number');
+      }
+      
       throw new Error(error.message);
     }
     
@@ -50,6 +88,19 @@ export async function signUp(email, password, username) {
     }
     
     console.log('[Auth] User created successfully:', data.user.id);
+    
+    // Auto-login after signup (since no email confirmation needed)
+    const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+    
+    if (sessionError) {
+      console.error('[Auth] Auto-login error:', sessionError);
+      // Still redirect to login if auto-login fails
+      window.location.href = '/index.html';
+      return;
+    }
     
     // Redirect to portfolio
     window.location.href = '/portfolio.html';
@@ -82,6 +133,9 @@ export async function login(email, password) {
       // Make error messages more user-friendly
       if (error.message.includes('Invalid login credentials')) {
         throw new Error('Invalid email or password');
+      }
+      if (error.message.includes('Email not confirmed')) {
+        throw new Error('Please confirm your email address');
       }
       throw new Error(error.message);
     }
@@ -120,56 +174,6 @@ export async function logout() {
     
   } catch (error) {
     console.error('[Auth] Logout exception:', error);
-    throw error;
-  }
-}
-
-/**
- * Request password reset email
- */
-export async function requestPasswordReset(email) {
-  try {
-    console.log('[Auth] Requesting password reset for:', email);
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`
-    });
-    
-    if (error) {
-      console.error('[Auth] Password reset error:', error);
-      throw new Error(error.message);
-    }
-    
-    console.log('[Auth] Password reset email sent');
-    return 'Password reset email sent! Check your inbox.';
-    
-  } catch (error) {
-    console.error('[Auth] Password reset exception:', error);
-    throw error;
-  }
-}
-
-/**
- * Update password (after reset)
- */
-export async function updatePassword(newPassword) {
-  try {
-    console.log('[Auth] Updating password');
-    
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
-    
-    if (error) {
-      console.error('[Auth] Password update error:', error);
-      throw new Error(error.message);
-    }
-    
-    console.log('[Auth] Password updated successfully');
-    return 'Password updated successfully!';
-    
-  } catch (error) {
-    console.error('[Auth] Password update exception:', error);
     throw error;
   }
 }
