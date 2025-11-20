@@ -8,6 +8,7 @@ const router = express.Router();
 
 /**
  * Helper function to fetch current prices from Polygon
+ * Includes today's high/low for professional portfolio display
  */
 async function fetchCurrentPrices(symbols) {
     if (!symbols || symbols.length === 0) return {};
@@ -25,10 +26,13 @@ async function fetchCurrentPrices(symbols) {
             const data = await response.json();
             
             if (data.status === 'OK' && data.results && data.results.length > 0) {
+                const result = data.results[0];
                 prices[symbol] = {
-                    current: parseFloat(data.results[0].c),
-                    open: parseFloat(data.results[0].o),
-                    previousClose: parseFloat(data.results[0].c)
+                    current: parseFloat(result.c),
+                    open: parseFloat(result.o),
+                    high: parseFloat(result.h),
+                    low: parseFloat(result.l),
+                    previousClose: parseFloat(result.c)
                 };
             }
         } catch (error) {
@@ -277,6 +281,10 @@ router.get('/holdings', async (req, res) => {
             const recentSnapshotPrice = await getRecentSnapshotPrice(user_id, holding.symbol);
             const purchasedToday = await wasPurchasedToday(user_id, holding.symbol);
             
+            // Today's high/low (from Polygon data)
+            const todayHigh = priceData ? priceData.high : null;
+            const todayLow = priceData ? priceData.low : null;
+            
             const currentValue = holding.quantity * currentPrice;
             const totalCost = holding.avg_purchase_price * holding.quantity;
             
@@ -328,6 +336,9 @@ router.get('/holdings', async (req, res) => {
                 current_price: currentPrice,
                 current_value: currentValue,
                 total_cost: totalCost,
+                // Day's range
+                today_high: todayHigh,
+                today_low: todayLow,
                 // Four G/L metrics
                 intraday_gain_loss: intradayGL,
                 intraday_gain_loss_percent: intradayGLPercent,
@@ -342,6 +353,15 @@ router.get('/holdings', async (req, res) => {
                 has_recent_snapshot: recentSnapshotPrice !== null
             };
         }));
+        
+        // Calculate % of portfolio for each holding
+        const totalPortfolioValue = enrichedHoldings.reduce((sum, h) => sum + h.current_value, 0);
+        
+        enrichedHoldings.forEach(holding => {
+            holding.portfolio_percentage = totalPortfolioValue > 0 
+                ? (holding.current_value / totalPortfolioValue) * 100 
+                : 0;
+        });
         
         res.json(enrichedHoldings);
         
