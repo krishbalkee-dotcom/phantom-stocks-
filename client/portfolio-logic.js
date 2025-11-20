@@ -508,6 +508,18 @@ function renderPerformanceHeader() {
     
     const arrow = intradayChange > 0 ? '↗' : intradayChange < 0 ? '↘' : '→';
     
+    // Check if market is closed (after 4:00 PM ET or before 9:30 AM ET on weekdays)
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const etHours = etTime.getHours();
+    const etMinutes = etTime.getMinutes();
+    const etDay = etTime.getDay();
+    
+    const isWeekday = etDay >= 1 && etDay <= 5;
+    const afterClose = (etHours > 16) || (etHours === 16 && etMinutes >= 0);
+    const beforeOpen = (etHours < 9) || (etHours === 9 && etMinutes < 30);
+    const isAfterHours = isWeekday && (afterClose || beforeOpen);
+    
     const headerDiv = document.createElement('div');
     headerDiv.className = 'portfolio-performance-header';
     
@@ -515,9 +527,10 @@ function renderPerformanceHeader() {
         <div class="total-value">
             $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div class="today-change" style="color: ${color};">
-            ${arrow} $${Math.abs(intradayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-            (${intradayChange > 0 ? '+' : ''}${intradayChangePercent.toFixed(2)}%) today
+        <div class="today-change" style="color: ${color}; display: flex; align-items: center; gap: 0.5rem;">
+            <span>${arrow} $${Math.abs(intradayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+            (${intradayChange > 0 ? '+' : ''}${intradayChangePercent.toFixed(2)}%) today</span>
+            ${isAfterHours ? '<span style="color: #9ca3af; font-size: 0.65rem; font-weight: 300;">After Hours Trading</span>' : ''}
         </div>
     `;
     
@@ -730,8 +743,10 @@ async function openPortfolioSummary() {
     
     const totalValue = portfolioData?.total_value || 0;
     const cash = portfolioData?.cash || 0;
-    const todayChange = portfolioData?.today_profit_loss || 0;
-    const todayChangePercent = portfolioData?.today_profit_loss_percent || 0;
+    
+    // Use Intraday G/L instead of Today's change for immediate feedback
+    const intradayChange = portfolioData?.total_profit_loss || 0;
+    const intradayChangePercent = portfolioData?.total_profit_loss_percent || 0;
     
     // Calculate total invested
     const totalInvested = holdingsData.reduce((sum, h) => {
@@ -751,17 +766,29 @@ async function openPortfolioSummary() {
         unrealizedColor = '#a855f7';
     }
     
-    // Color logic for today's change
-    let todayColor;
-    if (todayChange > 0) {
-        todayColor = '#22c55e';
-    } else if (todayChange < 0) {
-        todayColor = '#ef4444';
+    // Color logic for intraday change
+    let intradayColor;
+    if (intradayChange > 0) {
+        intradayColor = '#22c55e';
+    } else if (intradayChange < 0) {
+        intradayColor = '#ef4444';
     } else {
-        todayColor = '#a855f7';
+        intradayColor = '#a855f7';
     }
     
-    const arrow = todayChange > 0 ? '↗' : todayChange < 0 ? '↘' : '→';
+    const arrow = intradayChange > 0 ? '↗' : intradayChange < 0 ? '↘' : '→';
+    
+    // Check if after hours
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const etHours = etTime.getHours();
+    const etMinutes = etTime.getMinutes();
+    const etDay = etTime.getDay();
+    
+    const isWeekday = etDay >= 1 && etDay <= 5;
+    const afterClose = (etHours > 16) || (etHours === 16 && etMinutes >= 0);
+    const beforeOpen = (etHours < 9) || (etHours === 9 && etMinutes < 30);
+    const isAfterHours = isWeekday && (afterClose || beforeOpen);
     
     // Helper function to format G/L with proper handling of null values
     const formatGL = (value, percent, isNewPosition = false, label = '') => {
@@ -784,9 +811,10 @@ async function openPortfolioSummary() {
             <div style="font-size: 2rem; font-weight: 400; margin-bottom: 0.75rem;">
                 $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div style="font-size: 1rem; color: ${todayColor};">
-                ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                (${todayChange > 0 ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
+            <div style="font-size: 1rem; color: ${intradayColor}; display: flex; align-items: center; gap: 0.5rem;">
+                <span>${arrow} $${Math.abs(intradayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                (${intradayChange > 0 ? '+' : ''}${intradayChangePercent.toFixed(2)}%) today</span>
+                ${isAfterHours ? '<span style="color: #9ca3af; font-size: 0.75rem; font-weight: 300;">After Hours Trading</span>' : ''}
             </div>
         </div>
         
