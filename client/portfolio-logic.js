@@ -790,27 +790,52 @@ async function openPortfolioSummary() {
                     <tr>
                         <th style="padding: 0.75rem; text-align: left; color: #9ca3af; font-weight: 400;">Symbol</th>
                         <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Last Price</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Recent Change</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Today G/L ($)</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Today G/L (%)</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Total G/L ($)</th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Total G/L (%)</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
+                            Intraday G/L
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Purchase</div>
+                        </th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
+                            Recent Change
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Last 30min</div>
+                        </th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
+                            Today G/L
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Market Open</div>
+                        </th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
+                            Total G/L
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Overall P&L</div>
+                        </th>
                         <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Quantity</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${holdingsData.map(holding => {
-                        const todayGL = holding.today_gain_loss || 0;
-                        const todayGLPercent = holding.today_gain_loss_percent || 0;
-                        const totalGL = holding.total_profit_loss || 0;
-                        const totalGLPercent = holding.total_profit_loss_percent || 0;
-                        const recentChange = holding.most_recent_change || 0;
-                        const recentChangePercent = holding.most_recent_change_percent || 0;
+                        // Get all four G/L metrics
+                        const intradayGL = holding.intraday_gain_loss;
+                        const intradayGLPercent = holding.intraday_gain_loss_percent;
+                        const recentChange = holding.most_recent_change;
+                        const recentChangePercent = holding.most_recent_change_percent;
+                        const todayGL = holding.today_gain_loss;
+                        const todayGLPercent = holding.today_gain_loss_percent;
+                        const totalGL = holding.total_profit_loss;
+                        const totalGLPercent = holding.total_profit_loss_percent;
                         
-                        // Color logic: green for positive, purple for zero, red for negative
-                        const todayColor = todayGL > 0 ? '#22c55e' : todayGL < 0 ? '#ef4444' : '#a855f7';
-                        const totalColor = totalGL > 0 ? '#22c55e' : totalGL < 0 ? '#ef4444' : '#a855f7';
-                        const recentColor = recentChange > 0 ? '#22c55e' : recentChange < 0 ? '#ef4444' : '#a855f7';
+                        // Helper function to format G/L with proper handling of null values
+                        const formatGL = (value, percent, isNewPosition = false, label = '') => {
+                            if (value === null || value === undefined) {
+                                return `<span style="color: #6b7280; font-size: 0.7rem;">${isNewPosition ? label : 'N/A'}</span>`;
+                            }
+                            const color = value > 0 ? '#22c55e' : value < 0 ? '#ef4444' : '#a855f7';
+                            return `
+                                <span style="color: ${color};">
+                                    ${value > 0 ? '+' : ''}$${Math.abs(value).toFixed(2)}
+                                </span>
+                                <div style="font-size: 0.7rem; color: ${color};">
+                                    ${percent > 0 ? '+' : ''}${percent.toFixed(2)}%
+                                </div>
+                            `;
+                        };
                         
                         return `
                             <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);">
@@ -821,21 +846,17 @@ async function openPortfolioSummary() {
                                 <td style="padding: 0.75rem; text-align: right;">
                                     $${parseFloat(holding.current_price || 0).toFixed(2)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right; color: ${recentColor};">
-                                    ${recentChange > 0 ? '+' : recentChange < 0 ? '' : ''}$${Math.abs(recentChange).toFixed(2)}
-                                    (${recentChangePercent > 0 ? '+' : recentChangePercent < 0 ? '' : ''}${recentChangePercent.toFixed(2)}%)
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${formatGL(intradayGL, intradayGLPercent)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
-                                    ${todayGL > 0 ? '+' : todayGL < 0 ? '' : ''}$${Math.abs(todayGL).toFixed(2)}
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${formatGL(recentChange, recentChangePercent, holding.is_new_position, 'New position')}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
-                                    ${todayGLPercent > 0 ? '+' : todayGLPercent < 0 ? '' : ''}${todayGLPercent.toFixed(2)}%
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${formatGL(todayGL, todayGLPercent, holding.is_new_position, 'Bought today')}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
-                                    ${totalGL > 0 ? '+' : totalGL < 0 ? '' : ''}$${Math.abs(totalGL).toFixed(2)}
-                                </td>
-                                <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
-                                    ${totalGLPercent > 0 ? '+' : totalGLPercent < 0 ? '' : ''}${totalGLPercent.toFixed(2)}%
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${formatGL(totalGL, totalGLPercent)}
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right;">
                                     ${parseFloat(holding.quantity || 0).toFixed(4)}
