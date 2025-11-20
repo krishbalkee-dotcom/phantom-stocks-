@@ -1,7 +1,8 @@
 /**
  * Portfolio Snapshots Cron Job
- * Runs every 30 minutes to create portfolio value snapshots
- * Used for performance chart historical data
+ * Runs every 30 minutes to create:
+ * 1. Portfolio value snapshots (for performance chart)
+ * 2. Holdings price snapshots (for Recent Change metric)
  */
 
 import cron from 'node-cron';
@@ -82,7 +83,8 @@ async function calculatePortfolioValue(userId) {
       return {
         totalValue: cashBalance,
         cashBalance: cashBalance,
-        holdingsValue: 0
+        holdingsValue: 0,
+        holdings: []
       };
     }
     
@@ -90,12 +92,18 @@ async function calculatePortfolioValue(userId) {
     const symbols = holdings.map(h => h.symbol);
     const prices = await fetchCurrentPrices(symbols);
     
-    // Calculate total holdings value
+    // Calculate total holdings value and prepare holdings data
     let holdingsValue = 0;
+    const holdingsWithPrices = [];
+    
     holdings.forEach(holding => {
       const currentPrice = prices[holding.symbol];
       if (currentPrice) {
         holdingsValue += parseFloat(holding.quantity) * currentPrice;
+        holdingsWithPrices.push({
+          symbol: holding.symbol,
+          price: currentPrice
+        });
       }
     });
     
@@ -104,7 +112,8 @@ async function calculatePortfolioValue(userId) {
     return {
       totalValue,
       cashBalance,
-      holdingsValue
+      holdingsValue,
+      holdings: holdingsWithPrices
     };
     
   } catch (error) {
@@ -114,10 +123,10 @@ async function calculatePortfolioValue(userId) {
 }
 
 /**
- * Create snapshots for all users
+ * Create portfolio and holdings snapshots for all users
  */
 async function createSnapshots() {
-  console.log('[Cron] Starting portfolio snapshot creation...');
+  console.log('[Cron] Starting portfolio and holdings snapshot creation...');
   const startTime = Date.now();
   
   try {
@@ -136,38 +145,71 @@ async function createSnapshots() {
     
     console.log(`[Cron] Found ${users.length} active users`);
     
-    let successCount = 0;
+    let portfolioSuccessCount = 0;
+    let holdingsSuccessCount = 0;
     let errorCount = 0;
     
     // Process each user
     for (const user of users) {
-      const portfolioValue = await calculatePortfolioValue(user.user_id);
+      const portfolioData = await calculatePortfolioValue(user.user_id);
       
-      if (!portfolioValue) {
+      if (!portfolioData) {
         errorCount++;
         continue;
       }
       
-      // Insert snapshot
-      const { error: insertError } = await supabase
+      // Insert portfolio snapshot
+      const { error: portfolioError } = await supabase
         .from('portfolio_snapshots')
         .insert({
           user_id: user.user_id,
-          total_value: portfolioValue.totalValue,
-          cash_balance: portfolioValue.cashBalance,
-          holdings_value: portfolioValue.holdingsValue
+          total_value: portfolioData.totalValue,
+          cash_balance: portfolioData.cashBalance,
+          holdings_value: portfolioData.holdingsValue
         });
       
-      if (insertError) {
-        console.error(`[Cron] Error inserting snapshot for ${user.user_id}:`, insertError);
+      if (portfolioError) {
+        console.error(`[Cron] Error inserting portfolio snapshot for ${user.user_id}:`, portfolioError);
         errorCount++;
       } else {
-        successCount++;
+        portfolioSuccessCount++;
+      }
+      
+      // Insert holdings snapshots for each holding
+      if (portfolioData.holdings && portfolioData.holdings.length > 0) {
+        const holdingsSnapshots = portfolioData.holdings.map(holding => ({
+          user_id: user.user_id,
+          symbol: holding.symbol,
+          price: holding.price
+        }));
+        
+        const { error: holdingsError } = await supabase
+          .from('holdings_snapshots')
+          .insert(holdingsSnapshots);
+        
+        if (holdingsError) {
+          console.error(`[Cron] Error inserting holdings snapshots for ${user.user_id}:`, holdingsError);
+          errorCount++;
+        } else {
+          holdingsSuccessCount += holdingsSnapshots.length;
+        }
       }
     }
     
+    // Cleanup old snapshots (keep only last 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    
+    await supabase
+      .from('holdings_snapshots')
+      .delete()
+      .lt('snapshot_at', sevenDaysAgo);
+    
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Cron] Snapshot creation complete: ${successCount} success, ${errorCount} errors (${duration}s)`);
+    console.log(`[Cron] Snapshot creation complete:`);
+    console.log(`  - Portfolio snapshots: ${portfolioSuccessCount} success`);
+    console.log(`  - Holdings snapshots: ${holdingsSuccessCount} success`);
+    console.log(`  - Errors: ${errorCount}`);
+    console.log(`  - Duration: ${duration}s`);
     
   } catch (error) {
     console.error('[Cron] Exception during snapshot creation:', error);
@@ -179,7 +221,7 @@ async function createSnapshots() {
  * Runs every 30 minutes
  */
 export function startPortfolioSnapshotJob() {
-  console.log('[Cron] Initializing portfolio snapshot job (every 30 minutes)');
+  console.log('[Cron] Initializing portfolio and holdings snapshot job (every 30 minutes)');
   
   // Run immediately on startup
   createSnapshots();

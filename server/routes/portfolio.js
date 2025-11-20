@@ -1,4 +1,4 @@
-// Portfolio Routes - Get portfolio data with corrected calculations
+// Portfolio Routes - Get portfolio data with corrected calculations + Intraday G/L
 import express from 'express';
 import fetch from 'node-fetch';
 import { supabase } from '../config/supabase.js';
@@ -91,6 +91,59 @@ async function getTodayOpenPrice(symbol) {
     } catch (error) {
         console.error(`Error fetching today's open for ${symbol}:`, error);
         return null;
+    }
+}
+
+/**
+ * Get most recent snapshot price for a holding (for Recent Change calculation)
+ */
+async function getRecentSnapshotPrice(userId, symbol) {
+    try {
+        // Get the most recent snapshot (within last 30 minutes)
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        
+        const { data: snapshots, error } = await supabase
+            .from('holdings_snapshots')
+            .select('price')
+            .eq('user_id', userId)
+            .eq('symbol', symbol)
+            .gte('snapshot_at', thirtyMinutesAgo)
+            .order('snapshot_at', { ascending: false })
+            .limit(1);
+        
+        if (error || !snapshots || snapshots.length === 0) {
+            return null;
+        }
+        
+        return parseFloat(snapshots[0].price);
+    } catch (error) {
+        console.error(`Error fetching recent snapshot for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Check if holding was purchased today
+ */
+async function wasPurchasedToday(userId, symbol) {
+    try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const { data: transactions, error } = await supabase
+            .from('transactions')
+            .select('executed_at')
+            .eq('user_id', userId)
+            .eq('symbol', symbol)
+            .eq('type', 'BUY')
+            .gte('executed_at', todayStart.toISOString())
+            .order('executed_at', { ascending: false })
+            .limit(1);
+        
+        return !error && transactions && transactions.length > 0;
+    } catch (error) {
+        console.error(`Error checking if ${symbol} was purchased today:`, error);
+        return false;
     }
 }
 
@@ -189,7 +242,7 @@ router.get('/summary', async (req, res) => {
 
 /**
  * GET /api/portfolio/holdings?user_id=xxx
- * Get all holdings for a user with detailed calculations
+ * Get all holdings for a user with detailed calculations including Intraday G/L
  */
 router.get('/holdings', async (req, res) => {
     try {
@@ -217,28 +270,44 @@ router.get('/holdings', async (req, res) => {
         const symbols = holdings.map(h => h.symbol);
         const currentPrices = await fetchCurrentPrices(symbols);
         
-        // Enrich holdings with all calculations
         const enrichedHoldings = await Promise.all(holdings.map(async (holding) => {
             const priceData = currentPrices[holding.symbol];
             const currentPrice = priceData ? priceData.current : (holding.current_price || holding.avg_purchase_price);
             const todayOpen = await getTodayOpenPrice(holding.symbol);
+            const recentSnapshotPrice = await getRecentSnapshotPrice(user_id, holding.symbol);
+            const purchasedToday = await wasPurchasedToday(user_id, holding.symbol);
             
             const currentValue = holding.quantity * currentPrice;
             const totalCost = holding.avg_purchase_price * holding.quantity;
-            const totalProfitLoss = currentValue - totalCost;
-            const totalProfitLossPercent = (totalProfitLoss / totalCost) * 100;
             
-            // Today's gain/loss calculations
-            let todayGainLoss = 0;
-            let todayGainLossPercent = 0;
-            let mostRecentChange = 0;
-            let mostRecentChangePercent = 0;
+            // INTRADAY G/L - Profit/loss from purchase price (always available immediately)
+            const intradayGL = currentValue - totalCost;
+            const intradayGLPercent = (intradayGL / totalCost) * 100;
             
-            if (todayOpen) {
+            // TOTAL G/L - Same as Intraday G/L (overall profit/loss)
+            const totalProfitLoss = intradayGL;
+            const totalProfitLossPercent = intradayGLPercent;
+            
+            // TODAY'S G/L - Only available if position was held at market open today
+            let todayGainLoss = null;
+            let todayGainLossPercent = null;
+            
+            if (todayOpen && !purchasedToday) {
                 todayGainLoss = (currentPrice - todayOpen) * holding.quantity;
                 todayGainLossPercent = ((currentPrice - todayOpen) / todayOpen) * 100;
-                mostRecentChange = currentPrice - todayOpen;
-                mostRecentChangePercent = ((currentPrice - todayOpen) / todayOpen) * 100;
+            }
+            
+            // RECENT CHANGE - Only available after first snapshot is created
+            let mostRecentChange = null;
+            let mostRecentChangePercent = null;
+            
+            if (recentSnapshotPrice) {
+                mostRecentChange = currentPrice - recentSnapshotPrice;
+                mostRecentChangePercent = ((currentPrice - recentSnapshotPrice) / recentSnapshotPrice) * 100;
+            } else if (purchasedToday) {
+                // For brand new positions, use purchase price as "snapshot"
+                mostRecentChange = currentPrice - holding.avg_purchase_price;
+                mostRecentChangePercent = ((currentPrice - holding.avg_purchase_price) / holding.avg_purchase_price) * 100;
             }
             
             // Update database with latest values
@@ -259,12 +328,18 @@ router.get('/holdings', async (req, res) => {
                 current_price: currentPrice,
                 current_value: currentValue,
                 total_cost: totalCost,
-                total_profit_loss: totalProfitLoss,
-                total_profit_loss_percent: totalProfitLossPercent,
+                // Four G/L metrics
+                intraday_gain_loss: intradayGL,
+                intraday_gain_loss_percent: intradayGLPercent,
+                most_recent_change: mostRecentChange,
+                most_recent_change_percent: mostRecentChangePercent,
                 today_gain_loss: todayGainLoss,
                 today_gain_loss_percent: todayGainLossPercent,
-                most_recent_change: mostRecentChange,
-                most_recent_change_percent: mostRecentChangePercent
+                total_profit_loss: totalProfitLoss,
+                total_profit_loss_percent: totalProfitLossPercent,
+                // Metadata flags
+                is_new_position: purchasedToday,
+                has_recent_snapshot: recentSnapshotPrice !== null
             };
         }));
         
