@@ -7,8 +7,8 @@ import cacheService from '../services/cacheService.js';
 const router = express.Router();
 
 /**
- * Helper function to fetch current prices from Polygon
- * Includes today's high/low for professional portfolio display
+ * Helper function to fetch current prices from Polygon (including after-hours)
+ * Uses latest available data including extended hours trading
  */
 async function fetchCurrentPrices(symbols) {
     if (!symbols || symbols.length === 0) return {};
@@ -18,21 +18,42 @@ async function fetchCurrentPrices(symbols) {
     
     const promises = symbols.map(async (symbol) => {
         try {
-            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+            // Use snapshot endpoint for latest price (includes after-hours)
+            const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${symbol}?apiKey=${POLYGON_KEY}`;
             const response = await fetch(url);
             
-            if (!response.ok) return;
+            if (!response.ok) {
+                // Fallback to previous day if snapshot fails
+                const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+                const fallbackResponse = await fetch(fallbackUrl);
+                const fallbackData = await fallbackResponse.json();
+                
+                if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
+                    const result = fallbackData.results[0];
+                    prices[symbol] = {
+                        current: parseFloat(result.c),
+                        open: parseFloat(result.o),
+                        high: parseFloat(result.h),
+                        low: parseFloat(result.l),
+                        previousClose: parseFloat(result.c)
+                    };
+                }
+                return;
+            }
             
             const data = await response.json();
             
-            if (data.status === 'OK' && data.results && data.results.length > 0) {
-                const result = data.results[0];
+            if (data.status === 'OK' && data.ticker) {
+                const ticker = data.ticker;
+                const day = ticker.day || {};
+                const prevDay = ticker.prevDay || {};
+                
                 prices[symbol] = {
-                    current: parseFloat(result.c),
-                    open: parseFloat(result.o),
-                    high: parseFloat(result.h),
-                    low: parseFloat(result.l),
-                    previousClose: parseFloat(result.c)
+                    current: parseFloat(ticker.lastTrade?.p || day.c || prevDay.c),
+                    open: parseFloat(day.o || prevDay.c),
+                    high: parseFloat(day.h || 0),
+                    low: parseFloat(day.l || 0),
+                    previousClose: parseFloat(prevDay.c || 0)
                 };
             }
         } catch (error) {
