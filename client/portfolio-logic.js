@@ -19,6 +19,8 @@ let transactionsData = [];
 let snapshotsData = [];
 let currentPeriod = '1D';
 let assetAllocationChart = null;
+let performanceChart = null;
+let lastTransactionAmount = 0; // Track last transaction for indicator
 
 // Initialize page
 async function initializePage() {
@@ -67,12 +69,20 @@ async function loadPortfolioData() {
         const [summary, holdings, transactions] = await Promise.all([
             getPortfolioSummary(currentUser.id),
             getHoldings(currentUser.id),
-            getTransactions(currentUser.id, 50)
+            getTransactions(currentUser.id, 100) // Get more for filtering
         ]);
         
         portfolioData = summary;
         holdingsData = holdings;
         transactionsData = transactions;
+        
+        // Calculate last transaction amount for indicator
+        if (transactions && transactions.length > 0) {
+            const lastTx = transactions[0];
+            lastTransactionAmount = lastTx.type === 'BUY' 
+                ? -parseFloat(lastTx.total_value || 0) 
+                : parseFloat(lastTx.total_value || 0);
+        }
         
         // Try to fetch snapshots, but don't fail if it errors
         try {
@@ -115,31 +125,108 @@ function updateUserInfo() {
     }
 }
 
+// Setup event listeners
+function setupEventListeners() {
+    // Time period buttons
+    document.querySelectorAll('.time-period').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const period = e.target.dataset.period;
+            
+            // Update active state
+            document.querySelectorAll('.time-period').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            // Update period and reload
+            currentPeriod = period;
+            try {
+                snapshotsData = await getPortfolioSnapshots(currentUser.id, currentPeriod);
+                renderPerformanceChart();
+            } catch (error) {
+                console.error('Error loading snapshots:', error);
+            }
+        });
+    });
+    
+    // Transaction period dropdown
+    const periodSelect = document.getElementById('transactionPeriod');
+    if (periodSelect) {
+        periodSelect.addEventListener('change', (e) => {
+            updateTransactionsList(parseInt(e.target.value));
+        });
+    }
+    
+    // Modal buttons
+    const summaryBtn = document.getElementById('portfolioSummaryBtn');
+    if (summaryBtn) {
+        summaryBtn.addEventListener('click', openPortfolioSummary);
+    }
+    
+    const newsBtn = document.getElementById('newsBtn');
+    if (newsBtn) {
+        newsBtn.addEventListener('click', openNewsModal);
+    }
+    
+    const avatarBtn = document.getElementById('userAvatar');
+    if (avatarBtn) {
+        avatarBtn.addEventListener('click', openAccountModal);
+    }
+    
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
+    if (changePasswordBtn) {
+        changePasswordBtn.addEventListener('click', handleChangePassword);
+    }
+    
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+}
+
 // Render entire portfolio
 function renderPortfolio() {
-    updateCashDisplay();
-    updateTransactionsList();
+    renderSummaryCards();
+    updateTransactionsList(10); // Default 10 days
     renderPerformanceChart();
     renderAssetAllocationChart();
 }
 
-// Update available cash display
-function updateCashDisplay() {
-    const cash = portfolioData?.cash || 0;
+// Render summary cards with transaction indicator
+function renderSummaryCards() {
     const cashEl = document.getElementById('availableCash');
     
     if (cashEl) {
-        cashEl.textContent = `$${cash.toLocaleString('en-US', { 
+        const cash = portfolioData?.cash || 0;
+        const cashFormatted = `$${cash.toLocaleString('en-US', { 
             minimumFractionDigits: 2, 
             maximumFractionDigits: 2 
         })}`;
-    } else {
-        console.warn('Element "availableCash" not found');
+        
+        // Check if there was a recent transaction (within 5 seconds)
+        const showIndicator = Math.abs(lastTransactionAmount) > 0;
+        
+        if (showIndicator) {
+            const isPositive = lastTransactionAmount > 0;
+            const arrow = isPositive ? '↗' : '↘';
+            const color = isPositive ? '#22c55e' : '#ef4444';
+            const amountFormatted = `${isPositive ? '+' : ''}$${Math.abs(lastTransactionAmount).toLocaleString('en-US', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            })}`;
+            
+            cashEl.innerHTML = `
+                ${cashFormatted}
+                <div style="font-size: 0.7rem; color: ${color}; margin-top: 0.25rem;">
+                    ${arrow} ${amountFormatted}
+                </div>
+            `;
+        } else {
+            cashEl.textContent = cashFormatted;
+        }
     }
 }
 
-// Update transactions list
-function updateTransactionsList() {
+// Update transactions list with time formatting
+function updateTransactionsList(days = 10) {
     const container = document.getElementById('transactionsList');
     
     if (!container) {
@@ -152,15 +239,42 @@ function updateTransactionsList() {
         return;
     }
     
-    // Show last 5 transactions
-    const recentTransactions = transactionsData.slice(0, 5);
+    // Filter by days
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    const filteredTransactions = transactionsData.filter(tx => {
+        const txDate = new Date(tx.executed_at || tx.created_at);
+        return txDate >= cutoffDate;
+    });
+    
+    if (filteredTransactions.length === 0) {
+        container.innerHTML = `<p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">No transactions in past ${days} days</p>`;
+        return;
+    }
+    
+    // Show transactions (max 5)
+    const displayTransactions = filteredTransactions.slice(0, 5);
     
     container.innerHTML = `
         <div class="transaction-table">
-            ${recentTransactions.map(tx => {
-                // Get transaction type safely with null check
+            ${displayTransactions.map(tx => {
                 const txType = (tx.type || tx.action || 'UNKNOWN').toUpperCase();
                 const actionClass = txType === 'BUY' ? 'buy' : txType === 'SELL' ? 'sell' : '';
+                
+                // Format date and time: "Nov 18, 2025 | 2:45 PM"
+                const txDate = new Date(tx.executed_at || tx.created_at || Date.now());
+                const dateStr = txDate.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                });
+                const timeStr = txDate.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit', 
+                    hour12: true 
+                });
+                const formattedDateTime = `${dateStr} | ${timeStr}`;
                 
                 return `
                     <div class="transaction-row">
@@ -173,7 +287,7 @@ function updateTransactionsList() {
                         <div>$${parseFloat(tx.price || 0).toFixed(2)}</div>
                         <div>$${parseFloat(tx.total_amount || tx.total_value || 0).toFixed(2)}</div>
                         <div style="font-size: 0.7rem; color: #9ca3af;">
-                            ${new Date(tx.created_at || tx.executed_at || Date.now()).toLocaleDateString()}
+                            ${formattedDateTime}
                         </div>
                     </div>
                 `;
@@ -182,91 +296,202 @@ function updateTransactionsList() {
     `;
 }
 
-// Render performance chart (SVG-based)
+// Render performance chart using Chart.js
 function renderPerformanceChart() {
-    const svg = document.getElementById('chartSvg');
+    const container = document.getElementById('chartContainer');
     
-    if (!svg) {
-        console.warn('Element "chartSvg" not found');
+    if (!container) {
+        console.warn('Element "chartContainer" not found');
         return;
     }
     
-    const width = 800;
-    const height = 220;
-    const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+    // Clear existing content
+    container.innerHTML = '';
     
-    // Clear existing chart
-    svg.innerHTML = '';
+    // Create canvas for Chart.js
+    const canvas = document.createElement('canvas');
+    canvas.id = 'performanceChartCanvas';
+    container.appendChild(canvas);
     
-    if (!snapshotsData || snapshotsData.length === 0) {
-        // Show "no data" message
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', width / 2);
-        text.setAttribute('y', height / 2);
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('fill', '#9ca3af');
-        text.setAttribute('font-size', '14');
-        text.textContent = 'No performance data yet - start trading to track your portfolio';
-        svg.appendChild(text);
-        return;
+    // Destroy existing chart
+    if (performanceChart) {
+        performanceChart.destroy();
     }
     
     // Prepare data
-    const data = snapshotsData.map(s => ({
-        time: new Date(s.created_at).getTime(),
-        value: s.total_value
-    }));
+    let chartData = [];
+    let chartLabels = [];
     
-    // Calculate scales
-    const xMin = Math.min(...data.map(d => d.time));
-    const xMax = Math.max(...data.map(d => d.time));
-    const yMin = Math.min(...data.map(d => d.value)) * 0.99;
-    const yMax = Math.max(...data.map(d => d.value)) * 1.01;
-    
-    const xScale = (time) => {
-        return padding.left + ((time - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
-    };
-    
-    const yScale = (value) => {
-        return height - padding.bottom - ((value - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
-    };
-    
-    // Draw grid lines
-    const gridLines = 5;
-    for (let i = 0; i <= gridLines; i++) {
-        const y = padding.top + (i / gridLines) * (height - padding.top - padding.bottom);
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', padding.left);
-        line.setAttribute('y1', y);
-        line.setAttribute('x2', width - padding.right);
-        line.setAttribute('y2', y);
-        line.setAttribute('stroke', 'rgba(55, 65, 81, 0.3)');
-        line.setAttribute('stroke-width', '1');
-        svg.appendChild(line);
+    if (!snapshotsData || snapshotsData.length === 0) {
+        // New account - show flat line at $10,000
+        const now = new Date();
+        chartLabels = ['Start', 'Now'];
+        chartData = [10000, portfolioData?.total_value || 10000];
+    } else {
+        chartLabels = snapshotsData.map(s => new Date(s.snapshot_at));
+        chartData = snapshotsData.map(s => parseFloat(s.total_value));
     }
     
-    // Draw chart line
-    const pathData = data.map((d, i) => {
-        const x = xScale(d.time);
-        const y = yScale(d.value);
-        return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
-    }).join(' ');
+    // Determine if profit or loss
+    const startValue = chartData[0] || 10000;
+    const endValue = chartData[chartData.length - 1] || 10000;
+    const isProfitable = endValue >= startValue;
+    const lineColor = isProfitable ? '#22c55e' : '#ef4444';
     
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', pathData);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#ef4444');
-    path.setAttribute('stroke-width', '2');
-    svg.appendChild(path);
+    // Create gradient for new accounts
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, container.clientHeight);
+    gradient.addColorStop(0, 'rgba(168, 85, 247, 0.3)');
+    gradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
+    
+    // Chart configuration
+    performanceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Portfolio Value',
+                data: chartData,
+                borderColor: snapshotsData.length === 0 ? '#a855f7' : lineColor,
+                backgroundColor: snapshotsData.length === 0 ? gradient : 'transparent',
+                borderWidth: 2,
+                fill: snapshotsData.length === 0,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: lineColor,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(31, 41, 55, 0.95)',
+                    titleColor: '#f9fafb',
+                    bodyColor: '#f9fafb',
+                    borderColor: 'rgba(55, 65, 81, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            return `$${context.parsed.y.toLocaleString('en-US', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                            })}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: currentPeriod === '1D' ? 'hour' : currentPeriod === '1W' ? 'day' : 'day',
+                        displayFormats: {
+                            hour: 'h:mm a',
+                            day: 'MMM d'
+                        }
+                    },
+                    grid: {
+                        display: true,
+                        color: 'rgba(55, 65, 81, 0.2)'
+                    },
+                    ticks: {
+                        color: '#9ca3af',
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                y: {
+                    position: 'right',
+                    grid: {
+                        display: true,
+                        color: 'rgba(55, 65, 81, 0.2)'
+                    },
+                    ticks: {
+                        color: '#9ca3af',
+                        font: {
+                            size: 10
+                        },
+                        callback: function(value) {
+                            return '$' + value.toLocaleString('en-US', { 
+                                minimumFractionDigits: 0, 
+                                maximumFractionDigits: 0 
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Render portfolio performance header below chart
+    renderPerformanceHeader();
 }
 
-// Render asset allocation donut chart using Chart.js
+// Render performance header with total value and today's change
+function renderPerformanceHeader() {
+    const card = document.querySelector('.portfolio-performance-card');
+    
+    if (!card) return;
+    
+    // Remove existing header if present
+    const existingHeader = card.querySelector('.portfolio-performance-header');
+    if (existingHeader) {
+        existingHeader.remove();
+    }
+    
+    const totalValue = portfolioData?.total_value || 10000;
+    const todayChange = portfolioData?.today_profit_loss || 0;
+    const todayChangePercent = portfolioData?.today_profit_loss_percent || 0;
+    
+    const isPositive = todayChange >= 0;
+    const arrow = isPositive ? '↗' : '↘';
+    const color = isPositive ? '#22c55e' : '#ef4444';
+    
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'portfolio-performance-header';
+    headerDiv.style.cssText = 'margin-top: 0.75rem; text-align: center;';
+    
+    headerDiv.innerHTML = `
+        <div style="font-size: 1.5rem; font-weight: 400; margin-bottom: 0.25rem;">
+            $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        <div style="font-size: 0.75rem; color: ${color};">
+            ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+            (${isPositive ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
+        </div>
+    `;
+    
+    // Insert after chart container
+    const chartContainer = card.querySelector('.chart-container');
+    if (chartContainer && chartContainer.nextSibling) {
+        card.insertBefore(headerDiv, chartContainer.nextSibling);
+    } else if (chartContainer) {
+        card.appendChild(headerDiv);
+    }
+}
+
+// Render asset allocation donut chart
 function renderAssetAllocationChart() {
     const canvas = document.getElementById('assetAllocationChart');
-    const legendContainer = document.getElementById('assetAllocationLegend');
+    const legend = document.getElementById('assetAllocationLegend');
     
-    if (!canvas || !legendContainer) {
-        console.warn('Asset allocation chart elements not found');
+    if (!canvas) {
+        console.warn('Element "assetAllocationChart" not found');
         return;
     }
     
@@ -275,45 +500,22 @@ function renderAssetAllocationChart() {
         assetAllocationChart.destroy();
     }
     
-    // Check if holdings exist
     if (!holdingsData || holdingsData.length === 0) {
-        // Show empty state
-        const ctx = canvas.getContext('2d');
-        assetAllocationChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['No Holdings'],
-                datasets: [{
-                    data: [1],
-                    backgroundColor: ['rgba(156, 163, 175, 0.2)'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: false }
-                }
-            }
-        });
-        
-        legendContainer.innerHTML = '<div style="color: #6b7280; text-align: center;">Start trading to see allocation</div>';
+        if (legend) {
+            legend.innerHTML = '<p style="text-align: center; color: #9ca3af; font-size: 0.75rem;">No holdings yet - start trading to see allocation</p>';
+        }
         return;
     }
     
-    // Calculate asset allocation
     const allocation = calculateAssetAllocation(holdingsData);
     
     // Generate colors
     const colors = [
-        '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
-        '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#a855f7'
+        '#a855f7', '#ef4444', '#22c55e', '#3b82f6', '#f59e0b',
+        '#8b5cf6', '#ec4899', '#06b6d4', '#10b981', '#f97316'
     ];
     
     const ctx = canvas.getContext('2d');
-    
     assetAllocationChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -321,24 +523,25 @@ function renderAssetAllocationChart() {
             datasets: [{
                 data: allocation.map(a => a.value),
                 backgroundColor: colors.slice(0, allocation.length),
-                borderWidth: 0
+                borderColor: '#000000',
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: false
+                },
                 tooltip: {
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    padding: 12,
                     callbacks: {
                         label: function(context) {
                             const item = allocation[context.dataIndex];
-                            return [
-                                `${item.symbol}: $${item.value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-                                `${item.percentage}% of portfolio`
-                            ];
+                            return `${item.symbol}: $${item.value.toLocaleString('en-US', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                            })} (${item.percentage}%)`;
                         }
                     }
                 }
@@ -346,96 +549,39 @@ function renderAssetAllocationChart() {
         }
     });
     
-    // Render legend
-    let legendHTML = '';
-    allocation.forEach((item, index) => {
-        legendHTML += `
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                <div style="width: 12px; height: 12px; background-color: ${colors[index]}; border-radius: 2px;"></div>
-                <span style="color: #d1d5db;">${item.symbol} (${item.percentage}%)</span>
+    // Update legend
+    if (legend) {
+        legend.innerHTML = allocation.map((item, index) => `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="width: 12px; height: 12px; border-radius: 2px; background: ${colors[index]};"></div>
+                    <span>${item.symbol}</span>
+                </div>
+                <span style="color: #9ca3af;">${item.percentage}%</span>
             </div>
-        `;
-    });
-    
-    legendContainer.innerHTML = legendHTML;
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Time period buttons
-    document.querySelectorAll('.time-period').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            document.querySelectorAll('.time-period').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            currentPeriod = btn.dataset.period;
-            snapshotsData = await getPortfolioSnapshots(currentUser.id, currentPeriod);
-            renderPerformanceChart();
-        });
-    });
-    
-    // News button
-    const newsBtn = document.getElementById('newsBtn');
-    if (newsBtn) {
-        newsBtn.addEventListener('click', openNewsModal);
-    }
-    
-    // User avatar click - open account settings
-    const userAvatar = document.getElementById('userAvatar');
-    if (userAvatar) {
-        userAvatar.addEventListener('click', openAccountSettings);
-    }
-    
-    // Portfolio summary button
-    const summaryBtn = document.getElementById('portfolioSummaryBtn');
-    if (summaryBtn) {
-        summaryBtn.addEventListener('click', openPortfolioSummary);
-    }
-    
-    // Logout button
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Change password button
-    const changePwBtn = document.getElementById('changePasswordBtn');
-    if (changePwBtn) {
-        changePwBtn.addEventListener('click', handleChangePassword);
+        `).join('');
     }
 }
 
-// Open account settings modal
-async function openAccountSettings() {
+// Open account modal
+async function openAccountModal() {
     const modal = document.getElementById('accountModal');
+    const emailEl = document.getElementById('currentEmail');
+    const usernameEl = document.getElementById('currentUsername');
     
     if (!modal) {
         console.warn('Account modal not found');
         return;
     }
     
-    // Populate user info
-    const emailEl = document.getElementById('currentEmail');
-    if (emailEl) {
-        emailEl.value = currentUser.email;
-    }
-    
-    const { user_metadata } = currentUser;
-    const username = user_metadata?.username || currentUser.email.split('@')[0];
-    
-    const usernameEl = document.getElementById('currentUsername');
+    // Populate current info
+    if (emailEl) emailEl.value = currentUser.email;
     if (usernameEl) {
+        const username = currentUser.user_metadata?.username || currentUser.email.split('@')[0];
         usernameEl.value = username;
     }
     
-    // Clear password fields
-    const fields = ['currentPassword', 'newPassword', 'confirmNewPassword'];
-    fields.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-    
-    // Hide messages
+    // Clear any previous messages
     const errorEl = document.getElementById('passwordError');
     const successEl = document.getElementById('passwordSuccess');
     if (errorEl) errorEl.classList.remove('show');
@@ -482,8 +628,8 @@ async function openNewsModal() {
     }
 }
 
-// Open portfolio summary modal
-function openPortfolioSummary() {
+// Open comprehensive portfolio summary modal
+async function openPortfolioSummary() {
     const modal = document.getElementById('portfolioSummaryModal');
     const content = document.getElementById('portfolioSummaryContent');
     
@@ -494,40 +640,113 @@ function openPortfolioSummary() {
     
     const totalValue = portfolioData?.total_value || 0;
     const cash = portfolioData?.cash || 0;
-    const investedValue = totalValue - cash;
-    const initialValue = 10000;
-    const totalReturn = totalValue - initialValue;
-    const totalReturnPercent = ((totalReturn / initialValue) * 100).toFixed(2);
+    const todayChange = portfolioData?.today_profit_loss || 0;
+    const todayChangePercent = portfolioData?.today_profit_loss_percent || 0;
+    
+    // Calculate total invested
+    const totalInvested = holdingsData.reduce((sum, h) => {
+        return sum + (parseFloat(h.avg_purchase_price || 0) * parseFloat(h.quantity || 0));
+    }, 0);
+    
+    const unrealizedGains = totalValue - 10000;
+    const unrealizedGainsPercent = ((unrealizedGains / 10000) * 100).toFixed(2);
+    
+    const isTodayPositive = todayChange >= 0;
+    const arrow = isTodayPositive ? '↗' : '↘';
+    const todayColor = isTodayPositive ? '#22c55e' : '#ef4444';
     
     content.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <div class="setting-item">
-                <span>Total Portfolio Value</span>
-                <span style="font-weight: 400;">$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
+            <div style="font-size: 1.75rem; font-weight: 400; margin-bottom: 0.5rem;">
+                $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div class="setting-item">
-                <span>Available Cash</span>
-                <span style="font-weight: 400;">$${cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div class="setting-item">
-                <span>Invested Value</span>
-                <span style="font-weight: 400;">$${investedValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div class="setting-item">
-                <span>Total Return</span>
-                <span style="font-weight: 400; color: ${totalReturn >= 0 ? '#22c55e' : '#ef4444'};">
-                    ${totalReturn >= 0 ? '+' : ''}$${totalReturn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${totalReturn >= 0 ? '+' : ''}${totalReturnPercent}%)
-                </span>
-            </div>
-            <div class="setting-item">
-                <span>Number of Positions</span>
-                <span style="font-weight: 400;">${holdingsData.length}</span>
-            </div>
-            <div class="setting-item" style="border-bottom: none;">
-                <span>Total Transactions</span>
-                <span style="font-weight: 400;">${transactionsData.length}</span>
+            <div style="font-size: 0.9rem; color: ${todayColor};">
+                ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                (${isTodayPositive ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
             </div>
         </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
+                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Available to Trade</div>
+                <div style="font-size: 1.1rem; font-weight: 400;">$${cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
+                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Total Invested</div>
+                <div style="font-size: 1.1rem; font-weight: 400;">$${totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
+                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Unrealized Gains</div>
+                <div style="font-size: 1.1rem; font-weight: 400; color: ${unrealizedGains >= 0 ? '#22c55e' : '#ef4444'};">
+                    ${unrealizedGains >= 0 ? '+' : ''}$${Math.abs(unrealizedGains).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    (${unrealizedGains >= 0 ? '+' : ''}${unrealizedGainsPercent}%)
+                </div>
+            </div>
+        </div>
+        
+        ${holdingsData.length > 0 ? `
+        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                <thead style="position: sticky; top: 0; background: #000; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
+                    <tr>
+                        <th style="padding: 0.75rem; text-align: left; color: #9ca3af; font-weight: 400;">Symbol</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Last Price</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Recent Change</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Today G/L ($)</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Today G/L (%)</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Total G/L ($)</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Total G/L (%)</th>
+                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${holdingsData.map(holding => {
+                        const todayGL = holding.today_gain_loss || 0;
+                        const todayGLPercent = holding.today_gain_loss_percent || 0;
+                        const totalGL = holding.total_profit_loss || 0;
+                        const totalGLPercent = holding.total_profit_loss_percent || 0;
+                        const recentChange = holding.most_recent_change || 0;
+                        const recentChangePercent = holding.most_recent_change_percent || 0;
+                        
+                        const todayColor = todayGL >= 0 ? '#22c55e' : '#ef4444';
+                        const totalColor = totalGL >= 0 ? '#22c55e' : '#ef4444';
+                        const recentColor = recentChange >= 0 ? '#22c55e' : '#ef4444';
+                        
+                        return `
+                            <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);">
+                                <td style="padding: 0.75rem;">
+                                    <div style="font-weight: 400;">${holding.symbol}</div>
+                                    <div style="font-size: 0.7rem; color: #9ca3af;">${holding.name || holding.symbol}</div>
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    $${parseFloat(holding.current_price || 0).toFixed(2)}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; color: ${recentColor};">
+                                    ${recentChange >= 0 ? '+' : ''}$${Math.abs(recentChange).toFixed(2)}
+                                    (${recentChangePercent >= 0 ? '+' : ''}${recentChangePercent.toFixed(2)}%)
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
+                                    ${todayGL >= 0 ? '+' : ''}$${Math.abs(todayGL).toFixed(2)}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
+                                    ${todayGLPercent >= 0 ? '+' : ''}${todayGLPercent.toFixed(2)}%
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
+                                    ${totalGL >= 0 ? '+' : ''}$${Math.abs(totalGL).toFixed(2)}
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
+                                    ${totalGLPercent >= 0 ? '+' : ''}${totalGLPercent.toFixed(2)}%
+                                </td>
+                                <td style="padding: 0.75rem; text-align: right;">
+                                    ${parseFloat(holding.quantity || 0).toFixed(4)}
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : '<p style="text-align: center; color: #9ca3af; padding: 2rem;">No positions yet</p>'}
     `;
     
     modal.classList.add('show');

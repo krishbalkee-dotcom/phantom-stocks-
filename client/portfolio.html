@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="portfolio-styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
     <div class="dashboard">
@@ -67,9 +68,11 @@
                     <p>Track your portfolio performance and manage your investments</p>
                 </div>
                 
+                <!-- Main Grid: Performance Chart + Transactions on left, Two cards on right -->
                 <div class="grid grid-3">
-                    <!-- Portfolio Performance Chart -->
+                    <!-- Left Column: Performance Chart + Transactions -->
                     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <!-- Portfolio Performance Chart -->
                         <div class="card portfolio-performance-card">
                             <div class="card-header">
                                 <div>
@@ -88,41 +91,38 @@
                                 <button class="time-period" data-period="1Y">1Y</button>
                             </div>
                             <div class="chart-container" id="chartContainer">
-                                <svg class="chart-svg" id="chartSvg" viewBox="0 0 800 220">
-                                    <!-- Chart will be drawn here -->
-                                </svg>
+                                <!-- Chart.js canvas will be created here -->
                             </div>
                         </div>
                         
-                        
-<!-- Latest Transactions -->
-<div class="card latest-transactions-card">
-    <div class="card-header">
-        <div>
-            <div class="card-title">Transactions</div>
-            <div class="card-subtitle">Your trading history</div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <label style="font-size: 0.75rem; color: #9ca3af;">Time Period:</label>
-            <select id="transactionPeriod" style="padding: 0.25rem 0.5rem; background: rgba(55, 65, 81, 0.3); border: 1px solid rgba(55, 65, 81, 0.5); border-radius: 4px; color: #f9fafb; font-size: 0.75rem; font-family: inherit; cursor: pointer;">
-                <option value="5">Past 5 days</option>
-                <option value="10" selected>Past 10 days</option>
-                <option value="25">Past 25 days</option>
-                <option value="50">Past 50 days</option>
-                <option value="100">Past 100 days</option>
-            </select>
-        </div>
-    </div>
-    <div id="transactionsList">
-        <p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">Loading transactions...</p>
-    </div>
-</div>
+                        <!-- Latest Transactions -->
+                        <div class="card latest-transactions-card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-title">Transactions</div>
+                                    <div class="card-subtitle">Your trading history</div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <label style="font-size: 0.75rem; color: #9ca3af;">Time Period:</label>
+                                    <select id="transactionPeriod">
+                                        <option value="5">Past 5 days</option>
+                                        <option value="10" selected>Past 10 days</option>
+                                        <option value="25">Past 25 days</option>
+                                        <option value="50">Past 50 days</option>
+                                        <option value="100">Past 100 days</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="transactionsList">
+                                <p style="text-align: center; color: #9ca3af; font-size: 0.8rem; margin-top: 2rem;">Loading transactions...</p>
+                            </div>
+                        </div>
+                    </div>
                     
-                    
-                    <!-- Right Column -->
-                    <div class="right-column">
-                        <!-- Portfolio Value -->
-                        <div class="card">
+                    <!-- Right Column: Available to Trade + Asset Allocation (Side by Side) -->
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <!-- Available to Trade -->
+                        <div class="card" style="height: auto; min-height: 120px;">
                             <div class="card-header">
                                 <div>
                                     <div class="card-subtitle">Available to Trade</div>
@@ -135,7 +135,7 @@
                         </div>
                         
                         <!-- Asset Allocation -->
-                        <div class="card">
+                        <div class="card" style="height: auto; flex: 1;">
                             <div class="card-header">
                                 <div>
                                     <div class="card-title">Asset Allocation</div>
@@ -145,7 +145,6 @@
                                     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                                 </button>
                             </div>
-                            <!-- DONUT CHART ADDED HERE -->
                             <div style="position: relative; height: 250px; margin-top: 1rem;">
                                 <canvas id="assetAllocationChart"></canvas>
                             </div>
@@ -157,7 +156,7 @@
         </main>
     </div>
 
-    <!-- Portfolio Summary Modal -->
+    <!-- Portfolio Summary Modal (Large) -->
     <div id="portfolioSummaryModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('portfolioSummaryModal')">&times;</span>
