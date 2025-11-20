@@ -202,6 +202,7 @@ body {
 
 .portfolio-performance-card {
     height: 350px;
+    position: relative;
 }
 
 .latest-transactions-card {
@@ -276,7 +277,7 @@ body {
 
 /* Chart Container */
 .chart-container {
-    height: 220px;
+    height: 180px;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 0.5rem;
     position: relative;
@@ -552,6 +553,12 @@ body {
     backdrop-filter: blur(10px);
 }
 
+.modal-content h2 {
+    font-weight: 400;
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
 .close {
     color: #9ca3af;
     float: right;
@@ -570,21 +577,22 @@ body {
     max-height: 85vh;
 }
 
-/* Transaction period dropdown styling */
+/* Transaction period dropdown styling - BLACK BACKGROUND */
 #transactionPeriod {
     padding: 0.25rem 0.5rem;
-    background: rgba(55, 65, 81, 0.3);
+    background: #000000;
     border: 1px solid rgba(55, 65, 81, 0.5);
     border-radius: 4px;
     color: #f9fafb;
     font-size: 0.75rem;
-    font-family: inherit;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 300;
     cursor: pointer;
     transition: all 0.2s;
 }
 
 #transactionPeriod:hover {
-    background: rgba(55, 65, 81, 0.4);
+    background: rgba(0, 0, 0, 0.9);
     border-color: rgba(55, 65, 81, 0.7);
 }
 
@@ -593,9 +601,34 @@ body {
     border-color: #a855f7;
 }
 
-/* Portfolio performance header styles */
+/* Dropdown menu options - BLACK BACKGROUND */
+#transactionPeriod option {
+    background: #000000;
+    color: #f9fafb;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 300;
+    padding: 0.5rem;
+}
+
+/* Portfolio performance header styles - REPOSITIONED */
 .portfolio-performance-header {
-    margin-top: 0.75rem;
+    position: absolute;
+    top: 3.5rem;
+    left: 1rem;
+    z-index: 10;
+}
+
+.portfolio-performance-header .total-value {
+    font-size: 1.25rem;
+    font-weight: 400;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin-bottom: 0.15rem;
+}
+
+.portfolio-performance-header .today-change {
+    font-size: 0.7rem;
+    font-weight: 300;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Scrollbar styling for modal tables */
@@ -635,6 +668,17 @@ body {
     align-items: center;
     padding: 0.75rem 0;
     border-bottom: 1px solid rgba(55, 65, 81, 0.3);
+}
+
+/* Account Settings Button Row */
+.account-button-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.account-button-row .btn {
+    flex: 1;
 }
 
 /* Forms */
@@ -755,6 +799,16 @@ body {
     stroke-width: 1;
     stroke-dasharray: 2,2;
     opacity: 0.7;
+}
+
+/* Asset Allocation Chart Container - CENTERED */
+.asset-allocation-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    height: 220px;
+    margin-top: 1rem;
 }
 
 /* Responsive */

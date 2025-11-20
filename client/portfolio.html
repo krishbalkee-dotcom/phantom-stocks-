@@ -145,7 +145,7 @@
                                     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                                 </button>
                             </div>
-                            <div style="position: relative; height: 250px; margin-top: 1rem;">
+                            <div class="asset-allocation-container">
                                 <canvas id="assetAllocationChart"></canvas>
                             </div>
                             <div id="assetAllocationLegend" style="margin-top: 1rem; font-size: 0.75rem;"></div>
@@ -160,7 +160,7 @@
     <div id="portfolioSummaryModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('portfolioSummaryModal')">&times;</span>
-            <h2>Portfolio Summary</h2>
+            <h2 style="font-weight: 400;">Portfolio Summary</h2>
             <div id="portfolioSummaryContent">
                 <!-- Content will be populated here -->
             </div>
@@ -171,10 +171,9 @@
     <div id="accountModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('accountModal')">&times;</span>
-            <h2>Account Settings</h2>
+            <h2 style="font-weight: 400;">Account Settings</h2>
             
             <div class="settings-group">
-                <h3>Account Information</h3>
                 <div class="form-group">
                     <label for="currentEmail">Email</label>
                     <input type="email" id="currentEmail" disabled>
@@ -186,7 +185,7 @@
             </div>
             
             <div class="settings-group">
-                <h3>Change Password</h3>
+                <h3 style="font-weight: 400;">Change Password</h3>
                 <div class="form-group">
                     <label for="currentPassword">Current Password</label>
                     <input type="password" id="currentPassword" placeholder="Enter current password">
@@ -199,13 +198,12 @@
                     <label for="confirmNewPassword">Confirm New Password</label>
                     <input type="password" id="confirmNewPassword" placeholder="Confirm new password" minlength="6">
                 </div>
-                <button class="btn btn-primary" id="changePasswordBtn">Update Password</button>
                 <div class="error-message" id="passwordError"></div>
                 <div class="success-message" id="passwordSuccess"></div>
-            </div>
-            
-            <div class="settings-group">
-                <button class="btn" id="logoutBtn" style="width: 100%; border-color: #dc2626; color: #dc2626;">Logout</button>
+                <div class="account-button-row">
+                    <button class="btn btn-primary" id="changePasswordBtn">Update Password</button>
+                    <button class="btn" id="logoutBtn" style="border-color: #dc2626; color: #dc2626;">Logout</button>
+                </div>
             </div>
         </div>
     </div>
@@ -214,7 +212,7 @@
     <div id="newsModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <span class="close" onclick="closeModal('newsModal')">&times;</span>
-            <h2>Market News & Insights</h2>
+            <h2 style="font-weight: 400;">Market News & Insights</h2>
             <div id="newsList">
                 <!-- News items will be populated here -->
             </div>

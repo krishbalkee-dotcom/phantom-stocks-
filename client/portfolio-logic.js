@@ -21,6 +21,7 @@ let currentPeriod = '1D';
 let assetAllocationChart = null;
 let performanceChart = null;
 let lastTransactionAmount = 0; // Track last transaction for indicator
+let isPageVisible = true; // Track page visibility to prevent unnecessary animations
 
 // Initialize page
 async function initializePage() {
@@ -262,7 +263,7 @@ function updateTransactionsList(days = 10) {
                 const txType = (tx.type || tx.action || 'UNKNOWN').toUpperCase();
                 const actionClass = txType === 'BUY' ? 'buy' : txType === 'SELL' ? 'sell' : '';
                 
-                // Format date and time: "Nov 18, 2025 | 2:45 PM"
+                // Format date and time on one line: "Nov 18, 2025 | 2:45 PM"
                 const txDate = new Date(tx.executed_at || tx.created_at || Date.now());
                 const dateStr = txDate.toLocaleDateString('en-US', { 
                     month: 'short', 
@@ -286,7 +287,7 @@ function updateTransactionsList(days = 10) {
                         <div>${tx.quantity || 0} shares</div>
                         <div>$${parseFloat(tx.price || 0).toFixed(2)}</div>
                         <div>$${parseFloat(tx.total_amount || tx.total_value || 0).toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: #9ca3af;">
+                        <div style="font-size: 0.65rem; color: #9ca3af; white-space: nowrap;">
                             ${formattedDateTime}
                         </div>
                     </div>
@@ -332,19 +333,13 @@ function renderPerformanceChart() {
         chartData = snapshotsData.map(s => parseFloat(s.total_value));
     }
     
-    // Determine if profit or loss
-    const startValue = chartData[0] || 10000;
-    const endValue = chartData[chartData.length - 1] || 10000;
-    const isProfitable = endValue >= startValue;
-    const lineColor = isProfitable ? '#22c55e' : '#ef4444';
-    
-    // Create gradient for new accounts
+    // Purple line with purple gradient
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, container.clientHeight);
-    gradient.addColorStop(0, 'rgba(168, 85, 247, 0.3)');
+    gradient.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
     gradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
     
-    // Chart configuration
+    // Chart configuration with NO animation on data refresh
     performanceChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -352,14 +347,14 @@ function renderPerformanceChart() {
             datasets: [{
                 label: 'Portfolio Value',
                 data: chartData,
-                borderColor: snapshotsData.length === 0 ? '#a855f7' : lineColor,
-                backgroundColor: snapshotsData.length === 0 ? gradient : 'transparent',
+                borderColor: '#a855f7',
+                backgroundColor: gradient,
                 borderWidth: 2,
-                fill: snapshotsData.length === 0,
+                fill: true,
                 tension: 0.4,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                pointHoverBackgroundColor: lineColor,
+                pointHoverBackgroundColor: '#a855f7',
                 pointHoverBorderColor: '#fff',
                 pointHoverBorderWidth: 2
             }]
@@ -367,6 +362,9 @@ function renderPerformanceChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+                duration: isPageVisible ? 1000 : 0 // Animate only on page load/visibility change
+            },
             interaction: {
                 intersect: false,
                 mode: 'index'
@@ -377,13 +375,23 @@ function renderPerformanceChart() {
                 },
                 tooltip: {
                     enabled: true,
-                    backgroundColor: 'rgba(31, 41, 55, 0.95)',
+                    backgroundColor: '#000000',
                     titleColor: '#f9fafb',
                     bodyColor: '#f9fafb',
                     borderColor: 'rgba(55, 65, 81, 0.5)',
                     borderWidth: 1,
                     padding: 12,
                     displayColors: false,
+                    titleFont: {
+                        family: 'Inter',
+                        size: 11,
+                        weight: '300'
+                    },
+                    bodyFont: {
+                        family: 'Inter',
+                        size: 13,
+                        weight: '400'
+                    },
                     callbacks: {
                         label: function(context) {
                             return `$${context.parsed.y.toLocaleString('en-US', { 
@@ -400,43 +408,62 @@ function renderPerformanceChart() {
                     time: {
                         unit: currentPeriod === '1D' ? 'hour' : currentPeriod === '1W' ? 'day' : 'day',
                         displayFormats: {
-                            hour: 'h:mm a',
+                            hour: 'h a',
                             day: 'MMM d'
                         }
                     },
                     grid: {
                         display: true,
-                        color: 'rgba(55, 65, 81, 0.2)'
+                        color: 'rgba(55, 65, 81, 0.15)',
+                        lineWidth: 1
                     },
                     ticks: {
-                        color: '#9ca3af',
+                        color: '#6b7280',
                         font: {
-                            size: 10
-                        }
+                            family: 'Inter',
+                            size: 9,
+                            weight: '300'
+                        },
+                        maxTicksLimit: 6, // Cleaner X-axis
+                        maxRotation: 0,
+                        autoSkip: true
+                    },
+                    border: {
+                        display: false
                     }
                 },
                 y: {
                     position: 'right',
                     grid: {
                         display: true,
-                        color: 'rgba(55, 65, 81, 0.2)'
+                        color: 'rgba(55, 65, 81, 0.15)',
+                        lineWidth: 1
                     },
                     ticks: {
-                        color: '#9ca3af',
+                        color: '#6b7280',
                         font: {
-                            size: 10
+                            family: 'Inter',
+                            size: 9,
+                            weight: '300'
                         },
+                        maxTicksLimit: 5, // Cleaner Y-axis
                         callback: function(value) {
                             return '$' + value.toLocaleString('en-US', { 
                                 minimumFractionDigits: 0, 
                                 maximumFractionDigits: 0 
                             });
                         }
+                    },
+                    border: {
+                        display: false
                     }
                 }
             }
         }
     });
+    
+    // After first render, disable animation for subsequent updates
+    isPageVisible = false;
     
     // Render portfolio performance header below chart
     renderPerformanceHeader();
@@ -464,25 +491,19 @@ function renderPerformanceHeader() {
     
     const headerDiv = document.createElement('div');
     headerDiv.className = 'portfolio-performance-header';
-    headerDiv.style.cssText = 'margin-top: 0.75rem; text-align: center;';
     
     headerDiv.innerHTML = `
-        <div style="font-size: 1.5rem; font-weight: 400; margin-bottom: 0.25rem;">
+        <div class="total-value">
             $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div style="font-size: 0.75rem; color: ${color};">
+        <div class="today-change" style="color: ${color};">
             ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
             (${isPositive ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
         </div>
     `;
     
-    // Insert after chart container
-    const chartContainer = card.querySelector('.chart-container');
-    if (chartContainer && chartContainer.nextSibling) {
-        card.insertBefore(headerDiv, chartContainer.nextSibling);
-    } else if (chartContainer) {
-        card.appendChild(headerDiv);
-    }
+    // Insert at the beginning of card (positioned absolutely via CSS)
+    card.appendChild(headerDiv);
 }
 
 // Render asset allocation donut chart
@@ -509,10 +530,18 @@ function renderAssetAllocationChart() {
     
     const allocation = calculateAssetAllocation(holdingsData);
     
-    // Generate colors
+    // Professional color palette - purple shades
     const colors = [
-        '#a855f7', '#ef4444', '#22c55e', '#3b82f6', '#f59e0b',
-        '#8b5cf6', '#ec4899', '#06b6d4', '#10b981', '#f97316'
+        '#a855f7', // Purple
+        '#8b5cf6', // Violet
+        '#7c3aed', // Deep purple
+        '#6366f1', // Indigo
+        '#3b82f6', // Blue
+        '#06b6d4', // Cyan
+        '#10b981', // Green
+        '#f59e0b', // Amber
+        '#ef4444', // Red
+        '#ec4899'  // Pink
     ];
     
     const ctx = canvas.getContext('2d');
@@ -524,24 +553,58 @@ function renderAssetAllocationChart() {
                 data: allocation.map(a => a.value),
                 backgroundColor: colors.slice(0, allocation.length),
                 borderColor: '#000000',
-                borderWidth: 2
+                borderWidth: 3, // Thinner, sleeker border
+                hoverBorderColor: '#a855f7',
+                hoverBorderWidth: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            animation: {
+                duration: isPageVisible ? 800 : 0 // Only animate on page load
+            },
+            cutout: '70%', // Thinner donut (was default 50%)
             plugins: {
                 legend: {
                     display: false
                 },
                 tooltip: {
+                    enabled: true,
+                    backgroundColor: '#000000',
+                    titleColor: '#f9fafb',
+                    bodyColor: '#f9fafb',
+                    borderColor: 'rgba(55, 65, 81, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: true,
+                    boxWidth: 12,
+                    boxHeight: 12,
+                    titleFont: {
+                        family: 'Inter',
+                        size: 12,
+                        weight: '400'
+                    },
+                    bodyFont: {
+                        family: 'Inter',
+                        size: 11,
+                        weight: '300'
+                    },
                     callbacks: {
+                        title: function(context) {
+                            const item = allocation[context[0].dataIndex];
+                            return item.name || item.symbol;
+                        },
                         label: function(context) {
                             const item = allocation[context.dataIndex];
-                            return `${item.symbol}: $${item.value.toLocaleString('en-US', { 
-                                minimumFractionDigits: 2, 
-                                maximumFractionDigits: 2 
-                            })} (${item.percentage}%)`;
+                            return [
+                                `Value: $${item.value.toLocaleString('en-US', { 
+                                    minimumFractionDigits: 2, 
+                                    maximumFractionDigits: 2 
+                                })}`,
+                                `Allocation: ${item.percentage}%`,
+                                `Quantity: ${parseFloat(item.quantity).toFixed(4)} shares`
+                            ];
                         }
                     }
                 }
@@ -549,15 +612,23 @@ function renderAssetAllocationChart() {
         }
     });
     
-    // Update legend
+    // Update legend with professional styling
     if (legend) {
         legend.innerHTML = allocation.map((item, index) => `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <div style="width: 12px; height: 12px; border-radius: 2px; background: ${colors[index]};"></div>
-                    <span>${item.symbol}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; padding: 0.4rem 0.5rem; border-radius: 0.25rem; transition: background 0.2s;" 
+                 onmouseover="this.style.background='rgba(55, 65, 81, 0.2)'" 
+                 onmouseout="this.style.background='transparent'">
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+                    <div style="width: 10px; height: 10px; border-radius: 2px; background: ${colors[index]}; flex-shrink: 0;"></div>
+                    <div style="display: flex; flex-direction: column; min-width: 0;">
+                        <span style="font-weight: 400; font-size: 0.75rem;">${item.symbol}</span>
+                        <span style="font-size: 0.65rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</span>
+                    </div>
                 </div>
-                <span style="color: #9ca3af;">${item.percentage}%</span>
+                <div style="text-align: right; flex-shrink: 0; margin-left: 0.5rem;">
+                    <div style="font-size: 0.75rem; font-weight: 400;">${item.percentage}%</div>
+                    <div style="font-size: 0.65rem; color: #6b7280;">$${item.value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                </div>
             </div>
         `).join('');
     }
@@ -871,6 +942,19 @@ window.addEventListener('click', (e) => {
 // Initialize once when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initializePage();
+});
+
+// Track page visibility to control animations
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        isPageVisible = false;
+    } else {
+        isPageVisible = true;
+        // Re-enable animation briefly when returning to page
+        setTimeout(() => {
+            isPageVisible = false;
+        }, 1000);
+    }
 });
 
 // Auto-refresh portfolio data every 30 seconds
