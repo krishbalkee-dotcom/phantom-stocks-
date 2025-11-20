@@ -732,6 +732,16 @@ async function openPortfolioSummary() {
     const unrealizedGains = totalValue - 10000;
     const unrealizedGainsPercent = ((unrealizedGains / 10000) * 100).toFixed(2);
     
+    // Color logic for unrealized gains: green for positive, purple for zero, red for negative
+    let unrealizedColor;
+    if (unrealizedGains > 0) {
+        unrealizedColor = '#22c55e';
+    } else if (unrealizedGains < 0) {
+        unrealizedColor = '#ef4444';
+    } else {
+        unrealizedColor = '#a855f7'; // Purple for zero
+    }
+    
     // Color logic: green for positive, purple for zero, red for negative
     let todayColor;
     if (todayChange > 0) {
@@ -766,9 +776,9 @@ async function openPortfolioSummary() {
             </div>
             <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
                 <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Unrealized Gains</div>
-                <div style="font-size: 1.1rem; font-weight: 400; color: ${unrealizedGains >= 0 ? '#22c55e' : '#ef4444'};">
-                    ${unrealizedGains >= 0 ? '+' : ''}$${Math.abs(unrealizedGains).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    (${unrealizedGains >= 0 ? '+' : ''}${unrealizedGainsPercent}%)
+                <div style="font-size: 1.1rem; font-weight: 400; color: ${unrealizedColor};">
+                    ${unrealizedGains > 0 ? '+' : unrealizedGains < 0 ? '' : ''}$${Math.abs(unrealizedGains).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    (${unrealizedGains > 0 ? '+' : unrealizedGains < 0 ? '' : ''}${unrealizedGainsPercent}%)
                 </div>
             </div>
         </div>
