@@ -751,7 +751,7 @@ async function openPortfolioSummary() {
             </div>
             <div style="font-size: 0.9rem; color: ${todayColor};">
                 ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                (${isTodayPositive ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
+                (${todayChange > 0 ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
             </div>
         </div>
         
