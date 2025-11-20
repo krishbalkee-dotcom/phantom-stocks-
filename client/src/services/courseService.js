@@ -185,7 +185,7 @@ export function getActiveSession() {
     ...activeSession,
     totalSeconds: elapsedSeconds,
     formattedTime: formatTime(elapsedSeconds),
-    canComplete: elapsedSeconds >= 600 // 10 minutes = 600 seconds
+    canComplete: elapsedSeconds >= 300 // 5 minutes = 300 seconds
   };
 }
 

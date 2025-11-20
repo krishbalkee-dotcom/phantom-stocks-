@@ -1,6 +1,6 @@
 /**
- * Module Page Logic
- * Handles individual course module display, time tracking, and completion
+ * Module Page Logic (CLIENT-SIDE)
+ * Handles module content display, time tracking, and completion
  */
 
 import { requireAuth } from '../auth/authGuard.js';
@@ -20,41 +20,51 @@ const user = await requireAuth();
 const urlParams = new URLSearchParams(window.location.search);
 const moduleId = parseInt(urlParams.get('id'));
 
-if (!moduleId || isNaN(moduleId)) {
+if (!moduleId) {
+  alert('Invalid module ID');
   window.location.href = 'courses.html';
 }
 
+// Timer interval
 let timerInterval = null;
 
 // Initialize page
 async function init() {
   try {
-    // Load module data
+    // Load module content
     const module = await getModule(moduleId);
+    
+    if (!module) {
+      alert('Module not found');
+      window.location.href = 'courses.html';
+      return;
+    }
     
     // Render module
     renderModule(module);
     
-    // Start tracking
+    // Mark as started (if not already)
     await startModule(user.id, moduleId);
+    
+    // Start time tracking
     startTimeTracking(user.id, moduleId);
     
-    // Start UI timer
-    startUITimer();
+    // Start timer display
+    startTimerDisplay();
     
     // Setup complete button
     setupCompleteButton();
     
-    // Show content
+    // Setup back button with modal
+    setupBackButton();
+    
+    // Hide loading, show content
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('moduleContent').style.display = 'block';
     
-    // Prevent accidental navigation
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
   } catch (error) {
-    console.error('[Module] Error loading module:', error);
-    alert('Failed to load module. Redirecting...');
+    console.error('[Module] Error initializing:', error);
+    alert('Failed to load module. Please try again.');
     window.location.href = 'courses.html';
   }
 }
@@ -65,31 +75,30 @@ async function init() {
 function renderModule(module) {
   document.getElementById('moduleNumber').textContent = `MODULE ${module.id}`;
   document.getElementById('moduleTitle').textContent = module.title;
-  document.getElementById('articleContent').innerHTML = module.content;
+  document.getElementById('moduleDuration').textContent = `~${module.estimated_time_minutes || 5} min`;
+  document.getElementById('articleContent').innerHTML = module.content || '<p>No content available.</p>';
 }
 
 /**
- * Start UI timer display
+ * Start timer display (updates every second)
  */
-function startUITimer() {
+function startTimerDisplay() {
   timerInterval = setInterval(() => {
     const session = getActiveSession();
     
     if (session) {
       document.getElementById('timerText').textContent = session.formattedTime;
       
-      // Enable complete button after 10 minutes
+      // Enable complete button after 5 minutes
       const completeBtn = document.getElementById('completeBtn');
       const requirementMsg = document.getElementById('requirementMessage');
       
-      if (session.canComplete) {
+      if (session.canComplete && completeBtn.disabled) {
         completeBtn.disabled = false;
-        requirementMsg.style.display = 'none';
-      } else {
-        const remaining = 600 - session.totalSeconds;
-        const mins = Math.floor(remaining / 60);
-        const secs = remaining % 60;
-        requirementMsg.textContent = `⏱️ ${mins}:${secs.toString().padStart(2, '0')} remaining to complete`;
+        requirementMsg.textContent = 'You can now complete this module!';
+        requirementMsg.style.color = '#10b981';
+        requirementMsg.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        requirementMsg.style.background = 'rgba(16, 185, 129, 0.1)';
       }
     }
   }, 1000);
@@ -102,16 +111,29 @@ function setupCompleteButton() {
   const completeBtn = document.getElementById('completeBtn');
   
   completeBtn.addEventListener('click', async () => {
+    const session = getActiveSession();
+    
+    if (!session || !session.canComplete) {
+      alert('Please spend at least 5 minutes on this module before completing.');
+      return;
+    }
+    
+    completeBtn.disabled = true;
+    completeBtn.textContent = 'Completing...';
+    
     try {
-      completeBtn.disabled = true;
-      completeBtn.textContent = 'Completing...';
-      
       await completeModule(user.id, moduleId);
       
       // Show success message
-      document.getElementById('successMessage').classList.add('show');
+      const successMsg = document.getElementById('successMessage');
+      successMsg.classList.add('show');
+      
+      completeBtn.textContent = 'Completed!';
       completeBtn.classList.add('completed');
-      completeBtn.textContent = '✓ Completed';
+      
+      // Stop timer
+      stopTimeTracking();
+      clearInterval(timerInterval);
       
       // Redirect after 2 seconds
       setTimeout(() => {
@@ -120,7 +142,7 @@ function setupCompleteButton() {
       
     } catch (error) {
       console.error('[Module] Error completing module:', error);
-      alert(error.message || 'Failed to complete module. Please ensure you have spent at least 10 minutes on this page.');
+      alert(error.message || 'Failed to complete module. Please try again.');
       completeBtn.disabled = false;
       completeBtn.textContent = 'Complete Module';
     }
@@ -128,46 +150,52 @@ function setupCompleteButton() {
 }
 
 /**
- * Handle before unload (warn user they're leaving mid-session)
+ * Setup back button with custom modal
  */
-function handleBeforeUnload(e) {
-  const session = getActiveSession();
+function setupBackButton() {
+  const backBtn = document.getElementById('backBtn');
+  const modalOverlay = document.getElementById('modalOverlay');
+  const modalCancel = document.getElementById('modalCancel');
+  const modalOk = document.getElementById('modalOk');
   
-  if (session && !session.canComplete) {
+  backBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    e.returnValue = 'You haven\'t completed this module yet. Are you sure you want to leave?';
-    return e.returnValue;
-  }
-}
-
-/**
- * Handle back button
- */
-document.getElementById('backBtn').addEventListener('click', (e) => {
-  const session = getActiveSession();
-  
-  if (session && !session.canComplete) {
-    const confirmed = confirm('You haven\'t completed this module yet. Your progress will be saved, but you\'ll need to spend the full 10 minutes to complete it. Continue?');
     
-    if (!confirmed) {
-      e.preventDefault();
+    const session = getActiveSession();
+    
+    // If module is complete or can be completed, allow navigation
+    if (!session || session.canComplete) {
+      window.location.href = 'courses.html';
       return;
     }
-  }
+    
+    // Show custom modal instead of browser confirm
+    modalOverlay.classList.add('show');
+  });
   
-  // Stop tracking
-  stopTimeTracking();
-  if (timerInterval) {
-    clearInterval(timerInterval);
-  }
-});
+  // Modal cancel button
+  modalCancel.addEventListener('click', () => {
+    modalOverlay.classList.remove('show');
+  });
+  
+  // Modal OK button
+  modalOk.addEventListener('click', () => {
+    stopTimeTracking();
+    window.location.href = 'courses.html';
+  });
+  
+  // Click overlay to close
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      modalOverlay.classList.remove('show');
+    }
+  });
+}
 
 // Cleanup on page unload
-window.addEventListener('unload', () => {
+window.addEventListener('beforeunload', () => {
   stopTimeTracking();
-  if (timerInterval) {
-    clearInterval(timerInterval);
-  }
+  clearInterval(timerInterval);
 });
 
 // Initialize

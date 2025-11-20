@@ -192,12 +192,12 @@
     }
 
     .complete-requirement {
-      background: rgba(249, 115, 22, 0.1);
-      border: 1px solid rgba(249, 115, 22, 0.3);
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       border-radius: 6px;
       padding: 16px;
       margin-bottom: 24px;
-      color: #f97316;
+      color: #ef4444;
       font-size: 13px;
       font-weight: 300;
       text-align: center;
@@ -284,6 +284,106 @@
         padding: 24px;
       }
     }
+
+    /* Professional Black Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal {
+      background: #000000;
+      border: 1px solid rgba(55, 65, 81, 0.5);
+      border-radius: 8px;
+      padding: 32px;
+      max-width: 400px;
+      width: 90%;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 400;
+      margin-bottom: 12px;
+      color: #ffffff;
+    }
+
+    .modal-message {
+      font-size: 14px;
+      font-weight: 300;
+      color: #9ca3af;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .modal-btn {
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 400;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      border: none;
+    }
+
+    .modal-btn-cancel {
+      background: transparent;
+      border: 1px solid rgba(55, 65, 81, 0.5);
+      color: #9ca3af;
+    }
+
+    .modal-btn-cancel:hover {
+      background: rgba(55, 65, 81, 0.2);
+      border-color: #6b7280;
+    }
+
+    .modal-btn-ok {
+      background: #a855f7;
+      border: 1px solid #a855f7;
+      color: #ffffff;
+    }
+
+    .modal-btn-ok:hover {
+      background: #9333ea;
+      border-color: #9333ea;
+    }
   </style>
 </head>
 <body>
@@ -329,13 +429,25 @@
         You've reached the end of this module.
       </div>
       <div class="complete-requirement" id="requirementMessage">
-        Spend at least 10 minutes on this page to complete the module
+        Spend at least 5 minutes on this page to complete the module
       </div>
       <button class="complete-btn" id="completeBtn" disabled>
         Complete Module
       </button>
       <div class="success-message" id="successMessage">
         Module completed! Moving to next module...
+      </div>
+    </div>
+  </div>
+
+  <!-- Professional Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-title">Module Incomplete</div>
+      <div class="modal-message">You haven't completed this module yet. Your progress will be saved, but you'll need to spend the full 5 minutes to complete it. Continue?</div>
+      <div class="modal-buttons">
+        <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
+        <button class="modal-btn modal-btn-ok" id="modalOk">OK</button>
       </div>
     </div>
   </div>
