@@ -264,10 +264,10 @@ router.post('/complete/:id', async (req, res) => {
     
     const timeSpent = pageView?.total_time_seconds || 0;
     
-    if (timeSpent < 600) { // 10 minutes = 600 seconds
+    if (timeSpent < 300) { // 5 minutes = 300 seconds
       return res.status(400).json({ 
         error: 'Insufficient time spent',
-        required: 600,
+        required: 300,
         actual: timeSpent
       });
     }
@@ -316,20 +316,18 @@ router.post('/complete/:id', async (req, res) => {
 
 /**
  * GET /api/courses/check-unlock/:id
- * Check if a module is unlocked (previous module completed)
- * Query params: user_id
+ * Check if a module is unlocked
+ * Logic: 
+ * - Module 1: Always unlocked
+ * - Modules 2-3: Previous module in beginner must be complete
+ * - Module 4: All 3 beginner modules must be complete
+ * - Modules 5-6: Previous module in intermediate must be complete
+ * - Module 7: All 3 intermediate modules must be complete
+ * - Modules 8-9: Previous module in advanced must be complete
  */
 router.get('/check-unlock/:id', async (req, res) => {
   try {
     const { id: module_id } = req.params;
-    
-    // Debug logging
-    console.log('[Courses] /check-unlock called');
-    console.log('[Courses] module_id:', module_id);
-    console.log('[Courses] req.query:', req.query);
-    console.log('[Courses] req.query.user_id:', req.query.user_id);
-    console.log('[Courses] Full URL:', req.url);
-    
     const { user_id } = req.query;
     
     if (!user_id) {
@@ -337,43 +335,56 @@ router.get('/check-unlock/:id', async (req, res) => {
       return res.status(400).json({ error: 'user_id required' });
     }
     
+    const moduleNum = parseInt(module_id);
+    
     // Module 1 is always unlocked
-    if (parseInt(module_id) === 1) {
+    if (moduleNum === 1) {
       return res.json({ unlocked: true });
     }
     
-    // Get the module's order index
-    const { data: module } = await supabase
+    // Get current module info
+    const { data: currentModule } = await supabase
       .from('course_modules')
-      .select('order_index')
+      .select('category, order_index')
       .eq('id', module_id)
       .single();
     
-    if (!module) {
+    if (!currentModule) {
       return res.status(404).json({ error: 'Module not found' });
     }
     
-    // Check if previous module is completed
-    const { data: previousModule } = await supabase
-      .from('course_modules')
-      .select('id')
-      .eq('order_index', module.order_index - 1)
-      .single();
+    // Determine what needs to be completed
+    let requiredModuleIds = [];
     
-    if (!previousModule) {
-      return res.json({ unlocked: true }); // No previous module
+    if (moduleNum === 2 || moduleNum === 3) {
+      // Beginner level: just need previous module
+      requiredModuleIds = [moduleNum - 1];
+    } else if (moduleNum === 4) {
+      // First intermediate: need ALL beginner modules (1, 2, 3)
+      requiredModuleIds = [1, 2, 3];
+    } else if (moduleNum === 5 || moduleNum === 6) {
+      // Intermediate level: just need previous module
+      requiredModuleIds = [moduleNum - 1];
+    } else if (moduleNum === 7) {
+      // First advanced: need ALL intermediate modules (4, 5, 6)
+      requiredModuleIds = [4, 5, 6];
+    } else if (moduleNum === 8 || moduleNum === 9) {
+      // Advanced level: just need previous module
+      requiredModuleIds = [moduleNum - 1];
     }
     
-    const { data: progress } = await supabase
+    // Check if all required modules are completed
+    const { data: completedModules } = await supabase
       .from('user_course_progress')
-      .select('completed_at')
+      .select('module_id')
       .eq('user_id', user_id)
-      .eq('module_id', previousModule.id)
-      .single();
+      .not('completed_at', 'is', null)
+      .in('module_id', requiredModuleIds);
     
-    const unlocked = progress?.completed_at !== null;
+    const completedIds = completedModules?.map(m => m.module_id) || [];
+    const allCompleted = requiredModuleIds.every(id => completedIds.includes(id));
     
-    res.json({ unlocked: unlocked });
+    res.json({ unlocked: allCompleted });
     
   } catch (error) {
     console.error('[Courses] Error in /check-unlock/:id:', error);
