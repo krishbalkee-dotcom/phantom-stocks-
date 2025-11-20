@@ -277,7 +277,7 @@ body {
 
 /* Chart Container */
 .chart-container {
-    height: 180px;
+    height: 210px;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 0.5rem;
     position: relative;

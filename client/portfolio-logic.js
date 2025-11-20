@@ -424,16 +424,17 @@ function renderPerformanceChart() {
                             size: 9,
                             weight: '300'
                         },
-                        maxTicksLimit: 6, // Cleaner X-axis
+                        maxTicksLimit: 8, // More ticks for better visibility
                         maxRotation: 0,
-                        autoSkip: true
+                        autoSkip: true,
+                        padding: 8 // Add padding so labels aren't cut off
                     },
                     border: {
                         display: false
                     }
                 },
                 y: {
-                    position: 'right',
+                    position: 'left', // MOVED TO LEFT
                     grid: {
                         display: true,
                         color: 'rgba(55, 65, 81, 0.15)',
@@ -447,6 +448,7 @@ function renderPerformanceChart() {
                             weight: '300'
                         },
                         maxTicksLimit: 5, // Cleaner Y-axis
+                        padding: 8,
                         callback: function(value) {
                             return '$' + value.toLocaleString('en-US', { 
                                 minimumFractionDigits: 0, 
@@ -485,9 +487,17 @@ function renderPerformanceHeader() {
     const todayChange = portfolioData?.today_profit_loss || 0;
     const todayChangePercent = portfolioData?.today_profit_loss_percent || 0;
     
-    const isPositive = todayChange >= 0;
-    const arrow = isPositive ? '↗' : '↘';
-    const color = isPositive ? '#22c55e' : '#ef4444';
+    // Color logic: green for positive, purple for zero, red for negative
+    let color;
+    if (todayChange > 0) {
+        color = '#22c55e'; // Green
+    } else if (todayChange < 0) {
+        color = '#ef4444'; // Red
+    } else {
+        color = '#a855f7'; // Purple for zero
+    }
+    
+    const arrow = todayChange > 0 ? '↗' : todayChange < 0 ? '↘' : '→';
     
     const headerDiv = document.createElement('div');
     headerDiv.className = 'portfolio-performance-header';
@@ -498,7 +508,7 @@ function renderPerformanceHeader() {
         </div>
         <div class="today-change" style="color: ${color};">
             ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-            (${isPositive ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
+            (${todayChange > 0 ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
         </div>
     `;
     
@@ -530,18 +540,18 @@ function renderAssetAllocationChart() {
     
     const allocation = calculateAssetAllocation(holdingsData);
     
-    // Professional color palette - purple shades
+    // Professional color palette - purple AND red shades for variety
     const colors = [
         '#a855f7', // Purple
-        '#8b5cf6', // Violet
-        '#7c3aed', // Deep purple
-        '#6366f1', // Indigo
-        '#3b82f6', // Blue
-        '#06b6d4', // Cyan
-        '#10b981', // Green
-        '#f59e0b', // Amber
         '#ef4444', // Red
-        '#ec4899'  // Pink
+        '#8b5cf6', // Violet
+        '#dc2626', // Dark red
+        '#7c3aed', // Deep purple
+        '#f87171', // Light red
+        '#6366f1', // Indigo
+        '#b91c1c', // Deeper red
+        '#c026d3', // Fuchsia
+        '#991b1b'  // Darkest red
     ];
     
     const ctx = canvas.getContext('2d');
@@ -722,9 +732,17 @@ async function openPortfolioSummary() {
     const unrealizedGains = totalValue - 10000;
     const unrealizedGainsPercent = ((unrealizedGains / 10000) * 100).toFixed(2);
     
-    const isTodayPositive = todayChange >= 0;
-    const arrow = isTodayPositive ? '↗' : '↘';
-    const todayColor = isTodayPositive ? '#22c55e' : '#ef4444';
+    // Color logic: green for positive, purple for zero, red for negative
+    let todayColor;
+    if (todayChange > 0) {
+        todayColor = '#22c55e';
+    } else if (todayChange < 0) {
+        todayColor = '#ef4444';
+    } else {
+        todayColor = '#a855f7'; // Purple for zero
+    }
+    
+    const arrow = todayChange > 0 ? '↗' : todayChange < 0 ? '↘' : '→';
     
     content.innerHTML = `
         <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
@@ -779,9 +797,10 @@ async function openPortfolioSummary() {
                         const recentChange = holding.most_recent_change || 0;
                         const recentChangePercent = holding.most_recent_change_percent || 0;
                         
-                        const todayColor = todayGL >= 0 ? '#22c55e' : '#ef4444';
-                        const totalColor = totalGL >= 0 ? '#22c55e' : '#ef4444';
-                        const recentColor = recentChange >= 0 ? '#22c55e' : '#ef4444';
+                        // Color logic: green for positive, purple for zero, red for negative
+                        const todayColor = todayGL > 0 ? '#22c55e' : todayGL < 0 ? '#ef4444' : '#a855f7';
+                        const totalColor = totalGL > 0 ? '#22c55e' : totalGL < 0 ? '#ef4444' : '#a855f7';
+                        const recentColor = recentChange > 0 ? '#22c55e' : recentChange < 0 ? '#ef4444' : '#a855f7';
                         
                         return `
                             <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);">
@@ -793,20 +812,20 @@ async function openPortfolioSummary() {
                                     $${parseFloat(holding.current_price || 0).toFixed(2)}
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right; color: ${recentColor};">
-                                    ${recentChange >= 0 ? '+' : ''}$${Math.abs(recentChange).toFixed(2)}
-                                    (${recentChangePercent >= 0 ? '+' : ''}${recentChangePercent.toFixed(2)}%)
+                                    ${recentChange > 0 ? '+' : recentChange < 0 ? '' : ''}$${Math.abs(recentChange).toFixed(2)}
+                                    (${recentChangePercent > 0 ? '+' : recentChangePercent < 0 ? '' : ''}${recentChangePercent.toFixed(2)}%)
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
-                                    ${todayGL >= 0 ? '+' : ''}$${Math.abs(todayGL).toFixed(2)}
+                                    ${todayGL > 0 ? '+' : todayGL < 0 ? '' : ''}$${Math.abs(todayGL).toFixed(2)}
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right; color: ${todayColor};">
-                                    ${todayGLPercent >= 0 ? '+' : ''}${todayGLPercent.toFixed(2)}%
+                                    ${todayGLPercent > 0 ? '+' : todayGLPercent < 0 ? '' : ''}${todayGLPercent.toFixed(2)}%
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
-                                    ${totalGL >= 0 ? '+' : ''}$${Math.abs(totalGL).toFixed(2)}
+                                    ${totalGL > 0 ? '+' : totalGL < 0 ? '' : ''}$${Math.abs(totalGL).toFixed(2)}
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right; color: ${totalColor};">
-                                    ${totalGLPercent >= 0 ? '+' : ''}${totalGLPercent.toFixed(2)}%
+                                    ${totalGLPercent > 0 ? '+' : totalGLPercent < 0 ? '' : ''}${totalGLPercent.toFixed(2)}%
                                 </td>
                                 <td style="padding: 0.75rem; text-align: right;">
                                     ${parseFloat(holding.quantity || 0).toFixed(4)}
