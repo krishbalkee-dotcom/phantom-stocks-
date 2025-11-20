@@ -571,10 +571,75 @@ body {
     color: #f9fafb;
 }
 
-/* Portfolio Summary Modal - Larger size */
+/* Portfolio Summary Modal - Larger, more spacious design */
 #portfolioSummaryModal .modal-content {
-    max-width: 1000px;
-    max-height: 85vh;
+    max-width: 1400px;
+    max-height: 90vh;
+    padding: 2.5rem;
+}
+
+/* Portfolio Summary Table - Professional styling */
+#portfolioTable {
+    border-spacing: 0;
+    border-collapse: separate;
+    border: 1px solid rgba(55, 65, 81, 0.2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#portfolioTable thead {
+    background: rgba(55, 65, 81, 0.15);
+}
+
+#portfolioTable th {
+    padding: 1rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid rgba(55, 65, 81, 0.3) !important;
+}
+
+#portfolioTable tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+#portfolioTable tbody tr:hover {
+    background: rgba(55, 65, 81, 0.1);
+}
+
+#portfolioTable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+#portfolioTable td {
+    padding: 1rem 0.75rem !important;
+    font-size: 0.85rem !important;
+}
+
+/* Sort indicators */
+.sort-indicator {
+    margin-left: 0.25rem;
+    font-size: 0.7rem;
+    opacity: 0.5;
+}
+
+.sortable:hover {
+    background: rgba(168, 85, 247, 0.05);
+    transition: background 0.15s ease;
+}
+
+/* Summary cards at top of modal */
+#portfolioSummaryContent > div:first-child {
+    padding-bottom: 2rem !important;
+    margin-bottom: 2rem !important;
+}
+
+#portfolioSummaryContent .grid {
+    gap: 1.25rem !important;
+}
+
+#portfolioSummaryContent .grid > div {
+    padding: 1.5rem !important;
 }
 
 /* Transaction period dropdown styling - BLACK BACKGROUND */

@@ -780,72 +780,72 @@ async function openPortfolioSummary() {
     };
     
     content.innerHTML = `
-        <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
-            <div style="font-size: 1.75rem; font-weight: 400; margin-bottom: 0.5rem;">
+        <div style="margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(55, 65, 81, 0.2);">
+            <div style="font-size: 2rem; font-weight: 400; margin-bottom: 0.75rem;">
                 $${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div style="font-size: 0.9rem; color: ${todayColor};">
+            <div style="font-size: 1rem; color: ${todayColor};">
                 ${arrow} $${Math.abs(todayChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
                 (${todayChange > 0 ? '+' : ''}${todayChangePercent.toFixed(2)}%) today
             </div>
         </div>
         
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
-                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Available to Trade</div>
-                <div style="font-size: 1.1rem; font-weight: 400;">$${cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div class="grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 2rem;">
+            <div style="text-align: center; padding: 1.5rem; background: rgba(55, 65, 81, 0.15); border-radius: 8px; border: 1px solid rgba(55, 65, 81, 0.2);">
+                <div style="font-size: 0.7rem; color: #9ca3af; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Available to Trade</div>
+                <div style="font-size: 1.25rem; font-weight: 400;">$${cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
-            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
-                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Total Invested</div>
-                <div style="font-size: 1.1rem; font-weight: 400;">$${totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style="text-align: center; padding: 1.5rem; background: rgba(55, 65, 81, 0.15); border-radius: 8px; border: 1px solid rgba(55, 65, 81, 0.2);">
+                <div style="font-size: 0.7rem; color: #9ca3af; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Total Invested</div>
+                <div style="font-size: 1.25rem; font-weight: 400;">$${totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
-            <div style="text-align: center; padding: 1rem; background: rgba(55, 65, 81, 0.2); border-radius: 0.5rem;">
-                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.25rem;">Unrealized Gains</div>
-                <div style="font-size: 1.1rem; font-weight: 400; color: ${unrealizedColor};">
+            <div style="text-align: center; padding: 1.5rem; background: rgba(55, 65, 81, 0.15); border-radius: 8px; border: 1px solid rgba(55, 65, 81, 0.2);">
+                <div style="font-size: 0.7rem; color: #9ca3af; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Unrealized Gains</div>
+                <div style="font-size: 1.25rem; font-weight: 400; color: ${unrealizedColor};">
                     ${unrealizedGains > 0 ? '+' : unrealizedGains < 0 ? '' : ''}$${Math.abs(unrealizedGains).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    (${unrealizedGains > 0 ? '+' : unrealizedGains < 0 ? '' : ''}${unrealizedGainsPercent}%)
+                    <span style="font-size: 0.9rem; margin-left: 0.25rem;">(${unrealizedGains > 0 ? '+' : unrealizedGains < 0 ? '' : ''}${unrealizedGainsPercent}%)</span>
                 </div>
             </div>
         </div>
         
         ${holdingsData.length > 0 ? `
-        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
-            <table id="portfolioTable" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
-                <thead style="position: sticky; top: 0; background: #000; border-bottom: 1px solid rgba(55, 65, 81, 0.3);">
+        <div style="overflow-x: auto; max-height: 500px; overflow-y: auto; border-radius: 8px;">
+            <table id="portfolioTable" style="width: 100%; font-size: 0.85rem;">
+                <thead style="position: sticky; top: 0; background: rgba(55, 65, 81, 0.15); z-index: 10;">
                     <tr>
-                        <th class="sortable" data-sort="symbol" style="padding: 0.75rem; text-align: left; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="symbol" style="padding: 1rem 0.75rem; text-align: left; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Symbol <span class="sort-indicator">↕</span>
                         </th>
-                        <th class="sortable" data-sort="price_bought" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="price_bought" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Price Bought <span class="sort-indicator">↕</span>
                         </th>
-                        <th class="sortable" data-sort="current_price" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="current_price" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Last Price <span class="sort-indicator">↕</span>
                         </th>
-                        <th style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400;">
+                        <th style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Day's Range
-                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Low - High</div>
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 3px; text-transform: none; letter-spacing: normal;">Low - High</div>
                         </th>
-                        <th class="sortable" data-sort="portfolio_pct" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="portfolio_pct" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             % Portfolio <span class="sort-indicator">↕</span>
                         </th>
-                        <th class="sortable" data-sort="intraday" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="intraday" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Intraday G/L <span class="sort-indicator">↕</span>
-                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Purchase</div>
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 3px; text-transform: none; letter-spacing: normal;">Since Purchase</div>
                         </th>
-                        <th class="sortable" data-sort="recent" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="recent" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Recent Change <span class="sort-indicator">↕</span>
-                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Last 30min</div>
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 3px; text-transform: none; letter-spacing: normal;">Last 30min</div>
                         </th>
-                        <th class="sortable" data-sort="today" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="today" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Today G/L <span class="sort-indicator">↕</span>
-                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Since Market Open</div>
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 3px; text-transform: none; letter-spacing: normal;">Since Market Open</div>
                         </th>
-                        <th class="sortable" data-sort="total" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="total" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Total G/L <span class="sort-indicator">↕</span>
-                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 2px;">Overall P&L</div>
+                            <div style="font-size: 0.65rem; font-weight: 300; margin-top: 3px; text-transform: none; letter-spacing: normal;">Overall P&L</div>
                         </th>
-                        <th class="sortable" data-sort="quantity" style="padding: 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer;">
+                        <th class="sortable" data-sort="quantity" style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af; font-weight: 400; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
                             Quantity <span class="sort-indicator">↕</span>
                         </th>
                     </tr>
@@ -865,7 +865,7 @@ async function openPortfolioSummary() {
                         const dayLow = holding.today_low;
                         
                         return `
-                            <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.2);"
+                            <tr style="border-bottom: 1px solid rgba(55, 65, 81, 0.15);"
                                 data-symbol="${holding.symbol}"
                                 data-price-bought="${holding.avg_purchase_price}"
                                 data-current-price="${holding.current_price}"
@@ -875,37 +875,37 @@ async function openPortfolioSummary() {
                                 data-today="${todayGL || 0}"
                                 data-total="${totalGL || 0}"
                                 data-quantity="${holding.quantity}">
-                                <td style="padding: 0.75rem;">
-                                    <div style="font-weight: 400;">${holding.symbol}</div>
-                                    <div style="font-size: 0.7rem; color: #9ca3af;">${holding.name || holding.symbol}</div>
+                                <td style="padding: 1rem 0.75rem;">
+                                    <div style="font-weight: 500; font-size: 0.9rem;">${holding.symbol}</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">${holding.name || holding.symbol}</div>
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af;">
                                     $${parseFloat(holding.avg_purchase_price || 0).toFixed(2)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right; font-weight: 500;">
                                     $${parseFloat(holding.current_price || 0).toFixed(2)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right; font-size: 0.75rem;">
+                                <td style="padding: 1rem 0.75rem; text-align: right; font-size: 0.8rem; color: #9ca3af;">
                                     ${dayLow && dayHigh ? 
                                         `$${dayLow.toFixed(2)} - $${dayHigh.toFixed(2)}` : 
                                         '<span style="color: #6b7280;">N/A</span>'}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right; font-weight: 500;">
                                     ${portfolioPct.toFixed(2)}%
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right;">
                                     ${formatGL(intradayGL, intradayGLPercent)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right;">
                                     ${formatGL(recentChange, recentChangePercent, holding.is_new_position, 'New position')}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right;">
                                     ${formatGL(todayGL, todayGLPercent, holding.is_new_position, 'Bought today')}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right;">
                                     ${formatGL(totalGL, totalGLPercent)}
                                 </td>
-                                <td style="padding: 0.75rem; text-align: right;">
+                                <td style="padding: 1rem 0.75rem; text-align: right; color: #9ca3af;">
                                     ${parseFloat(holding.quantity || 0).toFixed(4)}
                                 </td>
                             </tr>
