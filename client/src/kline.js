@@ -362,7 +362,11 @@ export async function loadChartData(symbol, timeframe) {
     const data = await response.json();
     currentData = data;
     
-    const candleData = data.bars.map(bar => ({
+    // Filter out future candles (compare Unix timestamps in seconds)
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const validBars = data.bars.filter(bar => bar.time <= nowInSeconds);
+    
+    const candleData = validBars.map(bar => ({
       time: bar.time,
       open: parseFloat(bar.open),
       high: parseFloat(bar.high),
@@ -383,8 +387,8 @@ export async function loadChartData(symbol, timeframe) {
       candlestickSeries.setData(candleData);
     }
     
-    // Extract volume
-    const volumeData = data.bars.map(bar => ({
+    // Extract volume from filtered bars
+    const volumeData = validBars.map(bar => ({
       time: bar.time,
       value: bar.volume || 0,
       color: bar.close >= bar.open ? '#26a69a' : '#ef5350'

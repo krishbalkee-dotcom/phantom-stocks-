@@ -172,20 +172,51 @@ async function loadChart(symbol, timeframe) {
     }
 }
 
-// Update trade card with current symbol info
+// Update trade card with current symbol info - synced with chart's most recent candle
 async function updateTradeCard(symbol) {
     try {
-        // Fetch full price data with OHLC from backend
-        const response = await fetch(`https://phantom-stocks.onrender.com/api/market-data/price?symbol=${symbol}`);
+        // Fetch chart data to get most recent candle price
+        const chartResponse = await fetch(`https://phantom-stocks.onrender.com/api/market-data/chart?symbol=${symbol}&timeframe=${currentTimeframe}`);
+        const chartData = await chartResponse.json();
         
-        if (!response.ok) {
-            throw new Error('Failed to fetch price data');
+        let priceData = {};
+        
+        // Get most recent candle (after filtering future candles)
+        if (chartData.bars && chartData.bars.length > 0) {
+            const nowInSeconds = Math.floor(Date.now() / 1000);
+            const validBars = chartData.bars.filter(bar => bar.time <= nowInSeconds);
+            
+            if (validBars.length > 0) {
+                const latestCandle = validBars[validBars.length - 1];
+                
+                // Use latest candle data
+                currentPrice = parseFloat(latestCandle.close);
+                priceData = {
+                    price: latestCandle.close,
+                    open: latestCandle.open,
+                    high: latestCandle.high,
+                    low: latestCandle.low,
+                    close: latestCandle.close,
+                    change: 0,
+                    changePercent: 0
+                };
+                
+                // Check for stale price
+                const candleTime = new Date(latestCandle.time * 1000);
+                const now = new Date();
+                const minutesSinceCandle = (now - candleTime) / 60000;
+                
+                // Show stale price warning if > 5 minutes old
+                if (minutesSinceCandle > 5) {
+                    showNotification(`Price may be stale - last update was ${Math.floor(minutesSinceCandle)} minutes ago`);
+                }
+                
+                // Check for low volume
+                if (latestCandle.volume && latestCandle.volume < 100) {
+                    showNotification('Low trading volume detected - price may not reflect active market');
+                }
+            }
         }
-        
-        const priceData = await response.json();
-        
-        // Store current price
-        currentPrice = parseFloat(priceData.price) || parseFloat(priceData.close) || 0;
         
         // Update price display
         const priceEl = document.getElementById('currentPrice');
@@ -265,7 +296,6 @@ async function updateTradeCard(symbol) {
         
     } catch (error) {
         console.error('Error updating trade card:', error);
-        // REMOVED: showError('Failed to load stock data');
         // Silent failure
     }
 }
