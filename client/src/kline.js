@@ -321,6 +321,16 @@ export function initChart(containerId) {
       timeVisible: true,
       secondsVisible: false,
       barSpacing: 17, // Increased from 12 to 17
+      tickMarkFormatter: (time) => {
+        // Convert Unix timestamp (seconds) to Eastern Time 12-hour format
+        const date = new Date(time * 1000);
+        return date.toLocaleString('en-US', {
+          timeZone: 'America/New_York',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+      },
     },
   });
   

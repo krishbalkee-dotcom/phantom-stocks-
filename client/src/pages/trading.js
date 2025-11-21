@@ -189,16 +189,18 @@ async function updateTradeCard(symbol) {
             if (validBars.length > 0) {
                 const latestCandle = validBars[validBars.length - 1];
                 
-                // Use latest candle data
-                currentPrice = parseFloat(latestCandle.close);
+                // Use latest price from metadata (consistent across all timeframes)
+                currentPrice = parseFloat(chartData.metadata?.latestPrice || latestCandle.close);
+                
                 priceData = {
-                    price: latestCandle.close,
+                    price: currentPrice,  // Use consistent latest price
                     open: latestCandle.open,
                     high: latestCandle.high,
                     low: latestCandle.low,
                     close: latestCandle.close,
-                    change: 0,
-                    changePercent: 0
+                    change: parseFloat(chartData.metadata?.change || 0),
+                    changePercent: parseFloat(chartData.metadata?.changePercent || 0),
+                    timeframeLabel: chartData.metadata?.timeframeLabel || 'Last Candle'
                 };
                 
                 // Check for stale price
@@ -222,6 +224,12 @@ async function updateTradeCard(symbol) {
         const priceEl = document.getElementById('currentPrice');
         if (priceEl) {
             priceEl.textContent = `$${currentPrice.toFixed(2)}`;
+        }
+        
+        // Update timeframe label for OHLC card
+        const timeframeLabelEl = document.getElementById('timeframeLabel');
+        if (timeframeLabelEl) {
+            timeframeLabelEl.textContent = priceData.timeframeLabel || 'Last Candle';
         }
         
         // Update OHLC data
