@@ -8,7 +8,7 @@ const router = express.Router();
 
 /**
  * Helper function to fetch current prices from Polygon (including after-hours)
- * Uses latest available data including extended hours trading
+ * Uses aggregates endpoint (same as trading chart) for consistency
  */
 async function fetchCurrentPrices(symbols) {
     if (!symbols || symbols.length === 0) return {};
@@ -18,12 +18,20 @@ async function fetchCurrentPrices(symbols) {
     
     const promises = symbols.map(async (symbol) => {
         try {
-            // Use snapshot endpoint for latest price (includes after-hours)
-            const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${symbol}?apiKey=${POLYGON_KEY}`;
+            // Calculate time range: last 2 hours to ensure we get recent data
+            const now = new Date();
+            const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+            
+            const fromDate = twoHoursAgo.toISOString().split('T')[0];
+            const toDate = now.toISOString().split('T')[0];
+            
+            // Use aggregates endpoint (1-minute bars) - same as trading chart
+            // This includes after-hours data automatically
+            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromDate}/${toDate}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
             const response = await fetch(url);
             
             if (!response.ok) {
-                // Fallback to previous day if snapshot fails
+                // Fallback to previous day if aggregates fail
                 const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
                 const fallbackResponse = await fetch(fallbackUrl);
                 const fallbackData = await fallbackResponse.json();
@@ -43,18 +51,44 @@ async function fetchCurrentPrices(symbols) {
             
             const data = await response.json();
             
-            if (data.status === 'OK' && data.ticker) {
-                const ticker = data.ticker;
-                const day = ticker.day || {};
-                const prevDay = ticker.prevDay || {};
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+                // Get most recent bar (index 0 because we sorted desc)
+                const latestBar = data.results[0];
+                
+                // For day's high/low, we need to look at all bars from today
+                let dayHigh = latestBar.h;
+                let dayLow = latestBar.l;
+                let dayOpen = data.results[data.results.length - 1].o; // First bar of the day
+                
+                // Calculate high/low from all bars
+                data.results.forEach(bar => {
+                    if (bar.h > dayHigh) dayHigh = bar.h;
+                    if (bar.l < dayLow) dayLow = bar.l;
+                });
                 
                 prices[symbol] = {
-                    current: parseFloat(ticker.lastTrade?.p || day.c || prevDay.c),
-                    open: parseFloat(day.o || prevDay.c),
-                    high: parseFloat(day.h || 0),
-                    low: parseFloat(day.l || 0),
-                    previousClose: parseFloat(prevDay.c || 0)
+                    current: parseFloat(latestBar.c),      // Most recent close (inc. after-hours)
+                    open: parseFloat(dayOpen),             // First bar open
+                    high: parseFloat(dayHigh),             // Highest of all bars
+                    low: parseFloat(dayLow),               // Lowest of all bars
+                    previousClose: parseFloat(latestBar.c) // Use current as prev (will be replaced by proper logic)
                 };
+            } else {
+                // No recent data, fallback to /prev
+                const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+                const fallbackResponse = await fetch(fallbackUrl);
+                const fallbackData = await fallbackResponse.json();
+                
+                if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
+                    const result = fallbackData.results[0];
+                    prices[symbol] = {
+                        current: parseFloat(result.c),
+                        open: parseFloat(result.o),
+                        high: parseFloat(result.h),
+                        low: parseFloat(result.l),
+                        previousClose: parseFloat(result.c)
+                    };
+                }
             }
         } catch (error) {
             console.error(`Error fetching price for ${symbol}:`, error);

@@ -1,5 +1,6 @@
 // Market Data Routes - Get stock prices and chart data
 import express from 'express';
+import fetch from 'node-fetch';
 import polygonService from '../services/polygonService.js';
 import indicatorService from '../services/indicatorService.js';
 import cacheService from '../services/cacheService.js';
@@ -73,6 +74,44 @@ router.get('/chart', async (req, res) => {
             return res.status(404).json({ error: 'No data available for this symbol' });
         }
         
+        // Fetch latest 1-minute price for current price (consistent across all timeframes)
+        const now = new Date();
+        const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+        const latestPriceFrom = twoHoursAgo.toISOString().split('T')[0];
+        const latestPriceTo = now.toISOString().split('T')[0];
+        
+        let latestPrice = ohlcvData[ohlcvData.length - 1].close; // Default to timeframe's latest
+        let latestPriceTimestamp = ohlcvData[ohlcvData.length - 1].timestamp;
+        
+        try {
+            const latestPriceData = await polygonService.getAggregates(symbol, '1m', latestPriceFrom, latestPriceTo);
+            if (latestPriceData && latestPriceData.length > 0) {
+                latestPrice = latestPriceData[latestPriceData.length - 1].close;
+                latestPriceTimestamp = latestPriceData[latestPriceData.length - 1].timestamp;
+            }
+        } catch (error) {
+            console.warn('[Chart] Could not fetch latest 1-minute price, using timeframe latest:', error.message);
+        }
+        
+        // Fetch previous day's close for change calculation
+        let previousClose = latestPrice; // Default (no change)
+        let change = 0;
+        let changePercent = 0;
+        
+        try {
+            const prevDayUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${process.env.POLYGON_API_KEY}`;
+            const prevResponse = await fetch(prevDayUrl);
+            const prevData = await prevResponse.json();
+            
+            if (prevData.status === 'OK' && prevData.results && prevData.results.length > 0) {
+                previousClose = parseFloat(prevData.results[0].c);
+                change = latestPrice - previousClose;
+                changePercent = (change / previousClose) * 100;
+            }
+        } catch (error) {
+            console.warn('[Chart] Could not fetch previous close:', error.message);
+        }
+        
         // Calculate indicators
         const indicators = indicatorService.calculateAllIndicators(ohlcvData);
         
@@ -94,8 +133,13 @@ router.get('/chart', async (req, res) => {
                 barCount: ohlcvData.length,
                 from,
                 to,
-                latestPrice: ohlcvData[ohlcvData.length - 1].close,
-                hasLimitedData: ohlcvData.length < 500 // Warning flag for frontend
+                latestPrice: latestPrice,  // Always latest 1-minute price
+                latestPriceTimestamp: latestPriceTimestamp,
+                previousClose: previousClose,
+                change: change,
+                changePercent: changePercent,
+                hasLimitedData: ohlcvData.length < 500, // Warning flag for frontend
+                timeframeLabel: getTimeframeLabel(timeframe) // Label for OHLC card
             }
         };
         
@@ -109,6 +153,23 @@ router.get('/chart', async (req, res) => {
         res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });
+
+/**
+ * Helper: Get user-friendly timeframe label
+ */
+function getTimeframeLabel(timeframe) {
+    const labels = {
+        '1m': 'Last 1-Min Candle',
+        '5m': 'Last 5-Min Candle',
+        '15m': 'Last 15-Min Candle',
+        '30m': 'Last 30-Min Candle',
+        '1h': 'Last 1-Hour Candle',
+        '4h': 'Last 4-Hour Candle',
+        '1d': "Today's Trading Day",
+        'day': "Today's Trading Day"
+    };
+    return labels[timeframe] || `Last ${timeframe} Candle`;
+}
 
 /**
  * GET /api/market-data/details?symbol=AAPL
