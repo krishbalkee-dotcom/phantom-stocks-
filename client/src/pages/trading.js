@@ -147,6 +147,20 @@ async function loadChart(symbol, timeframe) {
             showNotification(`Limited trading data for ${symbol} (${chartData.metadata.barCount} bars). Switch to Line/Baseline chart recommended`);
         }
         
+        // Check for after-hours 1-minute timeframe warning
+        if (timeframe === '1m') {
+            const now = new Date();
+            const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+            const etHours = etTime.getHours();
+            
+            // After-hours: 4:00 PM - 8:00 PM (16-20) or Pre-market: 4:00 AM - 9:30 AM (4-9)
+            const isAfterHours = (etHours >= 16 && etHours < 20) || (etHours >= 4 && etHours < 9.5);
+            
+            if (isAfterHours) {
+                showNotification('After-hours 1-minute data may appear sparse due to low trading volume. This is normal.');
+            }
+        }
+        
         await loadChartData(symbol, timeframe);
         
         // Hide loading
@@ -202,16 +216,6 @@ async function updateTradeCard(symbol) {
                     changePercent: parseFloat(chartData.metadata?.changePercent || 0),
                     timeframeLabel: chartData.metadata?.timeframeLabel || 'Last Candle'
                 };
-                
-                // Check for stale price
-                const candleTime = new Date(latestCandle.time * 1000);
-                const now = new Date();
-                const minutesSinceCandle = (now - candleTime) / 60000;
-                
-                // Show stale price warning if > 5 minutes old
-                if (minutesSinceCandle > 5) {
-                    showNotification(`Price may be stale - last update was ${Math.floor(minutesSinceCandle)} minutes ago`);
-                }
                 
                 // Check for low volume
                 if (latestCandle.volume && latestCandle.volume < 100) {

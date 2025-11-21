@@ -296,6 +296,18 @@ export function initChart(containerId) {
   chart = createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight,
+    localization: {
+      timeFormatter: (time) => {
+        // Convert Unix timestamp (seconds) to Eastern Time 12-hour format for crosshair
+        const date = new Date(time * 1000);
+        return date.toLocaleString('en-US', {
+          timeZone: 'America/New_York',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+      },
+    },
     layout: {
       attributionLogo: false, // Remove TradingView watermark
       background: { color: '#0a0a0a' },
