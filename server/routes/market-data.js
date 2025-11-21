@@ -77,17 +77,26 @@ router.get('/chart', async (req, res) => {
         // Fetch latest 1-minute price for current price (consistent across all timeframes)
         const now = new Date();
         const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
-        const latestPriceFrom = twoHoursAgo.toISOString().split('T')[0];
-        const latestPriceTo = now.toISOString().split('T')[0];
+        
+        // Use Unix timestamps (milliseconds) for accurate time ranges
+        const latestPriceFrom = twoHoursAgo.getTime();
+        const latestPriceTo = now.getTime();
         
         let latestPrice = ohlcvData[ohlcvData.length - 1].close; // Default to timeframe's latest
         let latestPriceTimestamp = ohlcvData[ohlcvData.length - 1].timestamp;
         
         try {
-            const latestPriceData = await polygonService.getAggregates(symbol, '1m', latestPriceFrom, latestPriceTo);
-            if (latestPriceData && latestPriceData.length > 0) {
-                latestPrice = latestPriceData[latestPriceData.length - 1].close;
-                latestPriceTimestamp = latestPriceData[latestPriceData.length - 1].timestamp;
+            // Fetch using Unix timestamps
+            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${latestPriceFrom}/${latestPriceTo}?adjusted=true&sort=desc&limit=30&apiKey=${process.env.POLYGON_API_KEY}`;
+            const response = await fetch(url);
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'OK' && data.results && data.results.length > 0) {
+                    // Results are sorted desc (newest first)
+                    latestPrice = data.results[0].c;
+                    latestPriceTimestamp = new Date(data.results[0].t).toISOString();
+                }
             }
         } catch (error) {
             console.warn('[Chart] Could not fetch latest 1-minute price, using timeframe latest:', error.message);

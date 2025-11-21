@@ -18,16 +18,17 @@ async function fetchCurrentPrices(symbols) {
     
     const promises = symbols.map(async (symbol) => {
         try {
-            // Calculate time range: last 2 hours to ensure we get recent data
+            // Calculate time range: last 2 hours using Unix timestamps for precise window
             const now = new Date();
             const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
             
-            const fromDate = twoHoursAgo.toISOString().split('T')[0];
-            const toDate = now.toISOString().split('T')[0];
+            // Use Unix timestamps (milliseconds) for accurate time ranges
+            const fromTimestamp = twoHoursAgo.getTime();
+            const toTimestamp = now.getTime();
             
             // Use aggregates endpoint (1-minute bars) - same as trading chart
             // This includes after-hours data automatically
-            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromDate}/${toDate}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
+            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromTimestamp}/${toTimestamp}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
             const response = await fetch(url);
             
             if (!response.ok) {
