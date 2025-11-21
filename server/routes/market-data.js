@@ -74,6 +74,42 @@ router.get('/chart', async (req, res) => {
             return res.status(404).json({ error: 'No data available for this symbol' });
         }
         
+        // Special handling for 1-hour timeframe - append latest 1-min bar if last bar is old
+        if (timeframe === '1h' || timeframe === '60m') {
+            const lastBar = ohlcvData[ohlcvData.length - 1];
+            const lastBarTime = lastBar.time * 1000; // Convert to milliseconds
+            const now = Date.now();
+            const hoursSinceLastBar = (now - lastBarTime) / (1000 * 60 * 60);
+            
+            // If last 1-hour bar is more than 90 minutes old, append latest 1-min bar
+            if (hoursSinceLastBar > 1.5) {
+                console.log(`[Chart] 1-hour last bar is ${hoursSinceLastBar.toFixed(2)} hours old, fetching latest 1-min bar`);
+                
+                try {
+                    const latestMinUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${now - 3600000}/${now}?adjusted=true&sort=desc&limit=1&apiKey=${process.env.POLYGON_API_KEY}`;
+                    const latestMinResponse = await fetch(latestMinUrl);
+                    const latestMinData = await latestMinResponse.json();
+                    
+                    if (latestMinData.status === 'OK' && latestMinData.results && latestMinData.results.length > 0) {
+                        const latestMin = latestMinData.results[0];
+                        // Append as if it's a 1-hour bar
+                        ohlcvData.push({
+                            time: Math.floor(latestMin.t / 1000),
+                            open: latestMin.o,
+                            high: latestMin.h,
+                            low: latestMin.l,
+                            close: latestMin.c,
+                            volume: latestMin.v,
+                            timestamp: new Date(latestMin.t).toISOString()
+                        });
+                        console.log(`[Chart] Appended latest 1-min bar as current 1-hour bar: $${latestMin.c}`);
+                    }
+                } catch (error) {
+                    console.warn('[Chart] Could not append latest 1-min to 1-hour chart:', error.message);
+                }
+            }
+        }
+        
         // Fetch latest 1-minute price for current price (consistent across all timeframes)
         const now = new Date();
         const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
