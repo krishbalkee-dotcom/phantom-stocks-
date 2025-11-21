@@ -26,12 +26,17 @@ async function fetchCurrentPrices(symbols) {
             const fromTimestamp = twoHoursAgo.getTime();
             const toTimestamp = now.getTime();
             
+            console.log(`[Portfolio] Fetching ${symbol} - From: ${new Date(fromTimestamp).toISOString()} To: ${new Date(toTimestamp).toISOString()}`);
+            
             // Use aggregates endpoint (1-minute bars) - same as trading chart
             // This includes after-hours data automatically
             const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromTimestamp}/${toTimestamp}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
             const response = await fetch(url);
             
+            console.log(`[Portfolio] ${symbol} aggregates response status: ${response.status}`);
+            
             if (!response.ok) {
+                console.log(`[Portfolio] ${symbol} aggregates failed, using fallback /prev`);
                 // Fallback to previous day if aggregates fail
                 const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
                 const fallbackResponse = await fetch(fallbackUrl);
@@ -39,6 +44,7 @@ async function fetchCurrentPrices(symbols) {
                 
                 if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
                     const result = fallbackData.results[0];
+                    console.log(`[Portfolio] ${symbol} /prev fallback price: ${result.c}`);
                     prices[symbol] = {
                         current: parseFloat(result.c),
                         open: parseFloat(result.o),
@@ -52,9 +58,13 @@ async function fetchCurrentPrices(symbols) {
             
             const data = await response.json();
             
+            console.log(`[Portfolio] ${symbol} aggregates status: ${data.status}, results count: ${data.results?.length || 0}`);
+            
             if (data.status === 'OK' && data.results && data.results.length > 0) {
                 // Get most recent bar (index 0 because we sorted desc)
                 const latestBar = data.results[0];
+                
+                console.log(`[Portfolio] ${symbol} latest bar: time=${new Date(latestBar.t).toISOString()}, close=${latestBar.c}`);
                 
                 // For day's high/low, we need to look at all bars from today
                 let dayHigh = latestBar.h;
@@ -74,7 +84,10 @@ async function fetchCurrentPrices(symbols) {
                     low: parseFloat(dayLow),               // Lowest of all bars
                     previousClose: parseFloat(latestBar.c) // Use current as prev (will be replaced by proper logic)
                 };
+                
+                console.log(`[Portfolio] ${symbol} final price set: ${prices[symbol].current}`);
             } else {
+                console.log(`[Portfolio] ${symbol} no results from aggregates, using fallback /prev`);
                 // No recent data, fallback to /prev
                 const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
                 const fallbackResponse = await fetch(fallbackUrl);
