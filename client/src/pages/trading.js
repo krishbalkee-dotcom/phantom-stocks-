@@ -1,4 +1,4 @@
-// Trading Page Logic with Dropdown Handlers
+// Trading Page Logic with Market Hours Detection and Consistent Pricing
 import { requireAuth } from '../auth/authGuard.js';
 import { logout } from '../auth/auth.js';
 import { executeTrade, searchStocks } from '../services/tradingService.js';
@@ -15,9 +15,8 @@ let portfolioData = null;
 let currentPrice = 0;
 let currentHolding = 0;
 
-// Show sliding notification (matches kline.js style)
+// Show sliding notification
 function showNotification(message) {
-    // Add animation styles if not already present
     if (!document.querySelector('style[data-notification-animations]')) {
         const style = document.createElement('style');
         style.setAttribute('data-notification-animations', 'true');
@@ -74,6 +73,114 @@ function showNotification(message) {
     }, 3000);
 }
 
+/**
+ * Trading Session Detection
+ */
+function getTradingSession() {
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const hours = etTime.getHours();
+    const minutes = etTime.getMinutes();
+    const timeDecimal = hours + minutes / 60;
+    
+    if (timeDecimal >= 4 && timeDecimal < 9.5) {
+        return 'PRE_MARKET';
+    } else if (timeDecimal >= 9.5 && timeDecimal < 16) {
+        return 'REGULAR';
+    } else if (timeDecimal >= 16 && timeDecimal < 20) {
+        return 'AFTER_HOURS';
+    } else {
+        return 'CLOSED';
+    }
+}
+
+function isMarketOpen() {
+    const session = getTradingSession();
+    return session !== 'CLOSED';
+}
+
+function getSessionInfo() {
+    const session = getTradingSession();
+    
+    const sessionConfig = {
+        'PRE_MARKET': {
+            label: 'PRE-MARKET TRADING',
+            message: 'Limited liquidity. Prices may be volatile.',
+            tradingEnabled: true
+        },
+        'REGULAR': {
+            label: 'MARKET OPEN',
+            message: '',
+            tradingEnabled: true
+        },
+        'AFTER_HOURS': {
+            label: 'AFTER-HOURS TRADING',
+            message: 'Lower volume. Wider spreads possible.',
+            tradingEnabled: true
+        },
+        'CLOSED': {
+            label: 'MARKET CLOSED',
+            message: 'Trading resumes at 4:00 AM ET (Pre-Market)',
+            tradingEnabled: false
+        }
+    };
+    
+    return sessionConfig[session];
+}
+
+/**
+ * Update trading UI based on market session
+ */
+function updateTradingUI() {
+    const sessionInfo = getSessionInfo();
+    const buyBtn = document.getElementById('buyBtn');
+    const sellBtn = document.getElementById('sellBtn');
+    const quantityInput = document.getElementById('quantity');
+    
+    if (!sessionInfo.tradingEnabled) {
+        // DISABLE trading
+        if (buyBtn) {
+            buyBtn.disabled = true;
+            buyBtn.style.opacity = '0.5';
+            buyBtn.style.cursor = 'not-allowed';
+        }
+        if (sellBtn) {
+            sellBtn.disabled = true;
+            sellBtn.style.opacity = '0.5';
+            sellBtn.style.cursor = 'not-allowed';
+        }
+        if (quantityInput) {
+            quantityInput.disabled = true;
+            quantityInput.style.opacity = '0.5';
+        }
+        
+        // Show market closed message
+        showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
+    } else {
+        // ENABLE trading
+        if (buyBtn) {
+            buyBtn.disabled = false;
+            buyBtn.style.opacity = '1';
+            buyBtn.style.cursor = 'pointer';
+        }
+        if (sellBtn) {
+            sellBtn.disabled = false;
+            sellBtn.style.opacity = '1';
+            sellBtn.style.cursor = 'pointer';
+        }
+        if (quantityInput) {
+            quantityInput.disabled = false;
+            quantityInput.style.opacity = '1';
+        }
+        
+        // Show session warning if not regular hours
+        const session = getTradingSession();
+        if (session !== 'REGULAR' && sessionInfo.message) {
+            showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
+        }
+    }
+}
+
 // Initialize page
 async function initializePage() {
     try {
@@ -82,14 +189,20 @@ async function initializePage() {
         updateUserInfo();
         setupEventListeners();
         
-        // Initialize chart with correct container ID
+        // Initialize chart
         initChart('chart-container');
         
         // Load initial chart
         await loadChart(currentSymbol, currentTimeframe);
         
-        // Update trade card with initial symbol
+        // Update trade card
         await updateTradeCard(currentSymbol);
+        
+        // Update trading UI based on market hours
+        updateTradingUI();
+        
+        // Update trading UI every minute
+        setInterval(updateTradingUI, 60000);
         
     } catch (error) {
         console.error('Failed to initialize trading page:', error);
@@ -129,7 +242,7 @@ function updateCashDisplay() {
     }
 }
 
-// Load chart - SILENT (no success/error notifications)
+// Load chart - SILENT
 async function loadChart(symbol, timeframe) {
     try {
         console.log(`Loading chart: ${symbol} ${timeframe}`);
@@ -138,22 +251,21 @@ async function loadChart(symbol, timeframe) {
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay) loadingOverlay.style.display = 'flex';
         
-        // Fetch chart data to check metadata
+        // Fetch chart data
         const response = await fetch(`https://phantom-stocks.onrender.com/api/market-data/chart?symbol=${symbol}&timeframe=${timeframe}`);
         const chartData = await response.json();
         
-        // Check for limited data warning
+        // Check for warnings
         if (chartData.metadata?.hasLimitedData) {
             showNotification(`Limited trading data for ${symbol} (${chartData.metadata.barCount} bars). Switch to Line/Baseline chart recommended`);
         }
         
-        // Check for after-hours 1-minute timeframe warning
+        // Check for after-hours 1-minute warning
         if (timeframe === '1m') {
             const now = new Date();
             const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
             const etHours = etTime.getHours();
             
-            // After-hours: 4:00 PM - 8:00 PM (16-20) or Pre-market: 4:00 AM - 9:30 AM (4-9)
             const isAfterHours = (etHours >= 16 && etHours < 20) || (etHours >= 4 && etHours < 9.5);
             
             if (isAfterHours) {
@@ -173,9 +285,6 @@ async function loadChart(symbol, timeframe) {
         // Update trade card with symbol info
         await updateTradeCard(symbol);
         
-        // Update trading UI based on market session
-        updateTradingUI();
-        
         console.log('Chart loaded successfully');
     } catch (error) {
         console.error('Error loading chart:', error);
@@ -183,86 +292,37 @@ async function loadChart(symbol, timeframe) {
         // Hide loading on error
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay) loadingOverlay.style.display = 'none';
-        
-        // REMOVED: showError('Failed to load chart data');
-        // Silent failure - error logged to console only
     }
 }
 
-// Update trade card with current symbol info - synced with chart's most recent candle
+// Update trade card - USES METADATA.LATESTPRICE (ALWAYS CONSISTENT)
 async function updateTradeCard(symbol) {
     try {
-        // Fetch chart data to get most recent candle price
+        // Fetch chart data
         const chartResponse = await fetch(`https://phantom-stocks.onrender.com/api/market-data/chart?symbol=${symbol}&timeframe=${currentTimeframe}`);
         const chartData = await chartResponse.json();
         
-        let priceData = {};
-        
-        // Get most recent candle (after filtering future candles)
-        if (chartData.bars && chartData.bars.length > 0) {
-            const nowInSeconds = Math.floor(Date.now() / 1000);
-            const validBars = chartData.bars.filter(bar => bar.time <= nowInSeconds);
-            
-            if (validBars.length > 0) {
-                const latestCandle = validBars[validBars.length - 1];
-                
-                // Use latest price from metadata (consistent across all timeframes)
-                currentPrice = parseFloat(chartData.metadata?.latestPrice || latestCandle.close);
-                
-                priceData = {
-                    price: currentPrice,  // Use consistent latest price
-                    open: latestCandle.open,
-                    high: latestCandle.high,
-                    low: latestCandle.low,
-                    close: latestCandle.close,
-                    change: parseFloat(chartData.metadata?.change || 0),
-                    changePercent: parseFloat(chartData.metadata?.changePercent || 0),
-                    timeframeLabel: chartData.metadata?.timeframeLabel || 'Last Candle'
-                };
-                
-                // Check for low volume
-                if (latestCandle.volume && latestCandle.volume < 100) {
-                    showNotification('Low trading volume detected - price may not reflect active market');
-                }
-            }
+        // CRITICAL: Use metadata.latestPrice (SAME for all timeframes)
+        // NO FALLBACK to latestCandle.close! That varies by timeframe!
+        if (!chartData.metadata || !chartData.metadata.latestPrice) {
+            console.error('ERROR: metadata.latestPrice is missing!');
+            showNotification('Failed to fetch current price');
+            return;
         }
         
-        // Update price display
+        currentPrice = parseFloat(chartData.metadata.latestPrice);
+        
+        console.log(`[Trade Card] ${symbol} ${currentTimeframe}: Price = $${currentPrice} (from metadata.latestPrice)`);
+        
+        // Update price display (SAME for all timeframes)
         const priceEl = document.getElementById('currentPrice');
         if (priceEl) {
             priceEl.textContent = `$${currentPrice.toFixed(2)}`;
         }
         
-        // Update timeframe label for OHLC card
-        const timeframeLabelEl = document.getElementById('timeframeLabel');
-        if (timeframeLabelEl) {
-            timeframeLabelEl.textContent = priceData.timeframeLabel || 'Last Candle';
-        }
-        
-        // Update OHLC data
-        const openEl = document.getElementById('stockOpen');
-        if (openEl) {
-            openEl.textContent = `$${parseFloat(priceData.open || 0).toFixed(2)}`;
-        }
-        
-        const highEl = document.getElementById('stockHigh');
-        if (highEl) {
-            highEl.textContent = `$${parseFloat(priceData.high || 0).toFixed(2)}`;
-        }
-        
-        const lowEl = document.getElementById('stockLow');
-        if (lowEl) {
-            lowEl.textContent = `$${parseFloat(priceData.low || 0).toFixed(2)}`;
-        }
-        
-        const closeEl = document.getElementById('stockClose');
-        if (closeEl) {
-            closeEl.textContent = `$${parseFloat(priceData.close || currentPrice).toFixed(2)}`;
-        }
-        
-        // Update change display
-        const change = parseFloat(priceData.change || 0);
-        const changePercent = parseFloat(priceData.changePercent || 0);
+        // Update change display (SAME for all timeframes)
+        const change = parseFloat(chartData.metadata.change || 0);
+        const changePercent = parseFloat(chartData.metadata.changePercent || 0);
         
         const changeEl = document.getElementById('stockChange');
         if (changeEl) {
@@ -271,13 +331,40 @@ async function updateTradeCard(symbol) {
             changeEl.className = change >= 0 ? 'stock-change positive' : 'stock-change negative';
         }
         
+        // Update timeframe label for OHLC card
+        const timeframeLabelEl = document.getElementById('timeframeLabel');
+        if (timeframeLabelEl) {
+            timeframeLabelEl.textContent = chartData.metadata.timeframeLabel || 'Last Candle';
+        }
+        
+        // Update OHLC data (DIFFERENT for each timeframe - from last bar)
+        const openEl = document.getElementById('stockOpen');
+        if (openEl) {
+            openEl.textContent = `$${parseFloat(chartData.metadata.lastBarOpen || 0).toFixed(2)}`;
+        }
+        
+        const highEl = document.getElementById('stockHigh');
+        if (highEl) {
+            highEl.textContent = `$${parseFloat(chartData.metadata.lastBarHigh || 0).toFixed(2)}`;
+        }
+        
+        const lowEl = document.getElementById('stockLow');
+        if (lowEl) {
+            lowEl.textContent = `$${parseFloat(chartData.metadata.lastBarLow || 0).toFixed(2)}`;
+        }
+        
+        const closeEl = document.getElementById('stockClose');
+        if (closeEl) {
+            closeEl.textContent = `$${parseFloat(chartData.metadata.lastBarClose || 0).toFixed(2)}`;
+        }
+        
         // Update symbol display
         const symbolEl = document.getElementById('tradeSymbol');
         if (symbolEl) {
             symbolEl.textContent = symbol;
         }
         
-        // Fetch and update company name
+        // Fetch company name
         try {
             const searchResponse = await fetch(`https://phantom-stocks.onrender.com/api/trades/search?q=${symbol}`);
             const searchResults = await searchResponse.json();
@@ -293,7 +380,7 @@ async function updateTradeCard(symbol) {
             console.warn('Could not fetch company name:', nameError);
         }
         
-        // Check if user has holding
+        // Check holdings
         const holdingsResponse = await fetch(`https://phantom-stocks.onrender.com/api/portfolio/holdings?user_id=${currentUser.id}`);
         const holdings = await holdingsResponse.json();
         
@@ -311,11 +398,10 @@ async function updateTradeCard(symbol) {
         
     } catch (error) {
         console.error('Error updating trade card:', error);
-        // Silent failure
     }
 }
 
-// Update total amount based on quantity
+// Update total amount
 function updateTotal() {
     const quantityInput = document.getElementById('quantity');
     const totalEl = document.getElementById('totalAmount');
@@ -329,7 +415,7 @@ function updateTotal() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search functionality with live results
+    // Search functionality
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const searchResults = document.getElementById('searchResults');
@@ -345,11 +431,9 @@ function setupEventListeners() {
             }
         });
         
-        // Live search as user types
+        // Live search
         searchInput.addEventListener('input', async (e) => {
             const query = e.target.value.trim();
-            
-            console.log('[Search] Query:', query);
             
             if (query.length < 1) {
                 if (searchResults) searchResults.style.display = 'none';
@@ -358,12 +442,8 @@ function setupEventListeners() {
             
             try {
                 const url = `https://phantom-stocks.onrender.com/api/trades/search?q=${encodeURIComponent(query)}`;
-                console.log('[Search] Fetching:', url);
-                
                 const response = await fetch(url);
                 const results = await response.json();
-                
-                console.log('[Search] Results:', results);
                 
                 if (results && results.length > 0 && searchResults) {
                     const html = results.slice(0, 5).map(stock => `
@@ -376,7 +456,6 @@ function setupEventListeners() {
                     searchResults.innerHTML = html;
                     searchResults.style.display = 'block';
                     
-                    // Add click handlers
                     searchResults.querySelectorAll('.search-result-item').forEach(item => {
                         item.addEventListener('click', async () => {
                             const symbol = item.dataset.symbol;
@@ -421,15 +500,12 @@ function setupEventListeners() {
                 currentChartType = type;
                 chartTypeMenu.classList.remove('show');
                 
-                // Remove active from all items
                 document.querySelectorAll('.dropdown-item[data-chart-type]').forEach(i => {
                     i.classList.remove('active');
                 });
                 
-                // Add active to clicked item
                 item.classList.add('active');
                 
-                // Update label
                 const label = document.getElementById('chartTypeLabel');
                 if (label) {
                     const typeNames = {
@@ -440,9 +516,7 @@ function setupEventListeners() {
                     label.textContent = `Chart Type: ${typeNames[type] || type}`;
                 }
                 
-                // Change chart type
                 changeChartType(type);
-                console.log(`Chart type changed to: ${type}`);
             });
         });
     }
@@ -455,16 +529,12 @@ function setupEventListeners() {
         indicatorsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             indicatorsMenu.classList.toggle('show');
-            console.log('Indicators menu toggled');
         });
         
-        // Use .indicator-item instead of .dropdown-item
         document.querySelectorAll('.indicator-item[data-indicator]').forEach(item => {
             item.addEventListener('click', () => {
                 const indicator = item.dataset.indicator;
                 const isActive = activeIndicators.has(indicator);
-                
-                console.log(`Indicator ${indicator} clicked, active: ${isActive}`);
                 
                 if (isActive) {
                     activeIndicators.delete(indicator);
@@ -481,21 +551,18 @@ function setupEventListeners() {
     
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
-        // Close chart type menu if clicking outside
         const chartTypeMenu = document.getElementById('chartTypeMenu');
         const chartTypeBtn = document.getElementById('chartTypeBtn');
         if (chartTypeMenu && !chartTypeBtn?.contains(e.target) && !chartTypeMenu.contains(e.target)) {
             chartTypeMenu.classList.remove('show');
         }
         
-        // Close indicators menu if clicking outside
         const indicatorsMenu = document.getElementById('indicatorsMenu');
         const indicatorsBtn = document.getElementById('indicatorsBtn');
         if (indicatorsMenu && !indicatorsBtn?.contains(e.target) && !indicatorsMenu.contains(e.target)) {
             indicatorsMenu.classList.remove('show');
         }
         
-        // Close search results if clicking outside
         const searchResults = document.getElementById('searchResults');
         const searchInput = document.getElementById('searchInput');
         if (searchResults && !searchInput?.contains(e.target) && !searchResults.contains(e.target)) {
@@ -503,7 +570,7 @@ function setupEventListeners() {
         }
     });
     
-    // Quantity input - update total on change
+    // Quantity input
     const quantityInput = document.getElementById('quantity');
     if (quantityInput) {
         quantityInput.addEventListener('input', updateTotal);
@@ -522,32 +589,20 @@ function setupEventListeners() {
     }
 }
 
-// Handle search with validation
+// Handle search
 async function handleSearch() {
     const searchInput = document.getElementById('searchInput');
     const query = searchInput?.value?.trim().toUpperCase();
     
-    // Validate input
     if (!query || query.length === 0) {
         showNotification('Please enter a valid stock symbol');
         return;
     }
     
     try {
-        console.log(`Searching for: ${query}`);
-        
-        // Update current symbol
         currentSymbol = query;
-        
-        // Load new chart
         await loadChart(currentSymbol, currentTimeframe);
-        
-        // Update trade card
         await updateTradeCard(currentSymbol);
-        
-        // REMOVED: showSuccess(`Loaded ${currentSymbol}`);
-        // Silent success
-        
     } catch (error) {
         console.error('Search error:', error);
         showNotification(`Could not find symbol: ${query}`);
@@ -599,111 +654,6 @@ async function handleTrade(action) {
     } catch (error) {
         console.error('Trade execution error:', error);
         showNotification(error.message || 'Trade failed');
-    }
-}
-
-/**
- * Trading Session Detection
- */
-function getTradingSession() {
-    const now = new Date();
-    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const hours = etTime.getHours();
-    const minutes = etTime.getMinutes();
-    const timeDecimal = hours + minutes / 60;
-    
-    if (timeDecimal >= 4 && timeDecimal < 9.5) {
-        return 'PRE_MARKET';
-    } else if (timeDecimal >= 9.5 && timeDecimal < 16) {
-        return 'REGULAR';
-    } else if (timeDecimal >= 16 && timeDecimal < 20) {
-        return 'AFTER_HOURS';
-    } else {
-        return 'CLOSED';
-    }
-}
-
-function isMarketOpen() {
-    const session = getTradingSession();
-    return session !== 'CLOSED';
-}
-
-function getSessionInfo() {
-    const session = getTradingSession();
-    
-    const sessionConfig = {
-        'PRE_MARKET': {
-            label: 'PRE-MARKET TRADING',
-            message: 'Limited liquidity. Prices may be volatile.',
-            tradingEnabled: true
-        },
-        'REGULAR': {
-            label: 'MARKET OPEN',
-            message: '',
-            tradingEnabled: true
-        },
-        'AFTER_HOURS': {
-            label: 'AFTER-HOURS TRADING',
-            message: 'Lower volume. Prices delayed 15 minutes.',
-            tradingEnabled: true
-        },
-        'CLOSED': {
-            label: 'MARKET CLOSED',
-            message: 'Trading resumes at 4:00 AM ET (Pre-Market)',
-            tradingEnabled: false
-        }
-    };
-    
-    return sessionConfig[session];
-}
-
-function updateTradingUI() {
-    const sessionInfo = getSessionInfo();
-    const buyButton = document.getElementById('buyButton');
-    const sellButton = document.getElementById('sellButton');
-    const quantityInput = document.getElementById('quantityInput');
-    
-    if (!sessionInfo.tradingEnabled) {
-        // Disable trading
-        if (buyButton) {
-            buyButton.disabled = true;
-            buyButton.style.opacity = '0.5';
-            buyButton.style.cursor = 'not-allowed';
-        }
-        if (sellButton) {
-            sellButton.disabled = true;
-            sellButton.style.opacity = '0.5';
-            sellButton.style.cursor = 'not-allowed';
-        }
-        if (quantityInput) {
-            quantityInput.disabled = true;
-            quantityInput.style.opacity = '0.5';
-        }
-        
-        // Show market closed message
-        showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
-    } else {
-        // Enable trading
-        if (buyButton) {
-            buyButton.disabled = false;
-            buyButton.style.opacity = '1';
-            buyButton.style.cursor = 'pointer';
-        }
-        if (sellButton) {
-            sellButton.disabled = false;
-            sellButton.style.opacity = '1';
-            sellButton.style.cursor = 'pointer';
-        }
-        if (quantityInput) {
-            quantityInput.disabled = false;
-            quantityInput.style.opacity = '1';
-        }
-        
-        // Show session warning if not regular hours
-        const session = getTradingSession();
-        if (session !== 'REGULAR' && sessionInfo.message) {
-            showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
-        }
     }
 }
 
