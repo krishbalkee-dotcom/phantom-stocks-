@@ -1,13 +1,17 @@
-// Portfolio Routes - Get portfolio data with corrected calculations + Intraday G/L
+// Portfolio Routes - Get user portfolio, holdings, and transactions
 import express from 'express';
 import fetch from 'node-fetch';
 import { supabase } from '../config/supabase.js';
-import cacheService from '../services/cacheService.js';
+import polygonService from '../services/polygonService.js';
 
 const router = express.Router();
 
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
 /**
- * Check if market is currently open for trading
+ * Check if market is currently open (4 AM - 8 PM ET)
  */
 function isMarketOpen() {
     const now = new Date();
@@ -16,13 +20,14 @@ function isMarketOpen() {
     const minutes = etTime.getMinutes();
     const timeDecimal = hours + minutes / 60;
     
+    // Market hours: 4:00 AM - 8:00 PM ET (pre-market through after-hours)
     return timeDecimal >= 4 && timeDecimal < 20;
 }
 
 /**
- * Get most recent transaction for a symbol (within X minutes)
+ * Get recent transaction price for a symbol (within last 5 minutes)
  */
-async function getRecentTransaction(userId, symbol, minutesAgo = 5) {
+async function getRecentTransactionPrice(userId, symbol, minutesAgo = 5) {
     try {
         const cutoff = new Date(Date.now() - minutesAgo * 60 * 1000);
         
@@ -39,10 +44,7 @@ async function getRecentTransaction(userId, symbol, minutesAgo = 5) {
             return null;
         }
         
-        return {
-            price: parseFloat(data[0].price),
-            executedAt: data[0].executed_at
-        };
+        return parseFloat(data[0].price);
     } catch (error) {
         console.error(`Error fetching recent transaction for ${symbol}:`, error);
         return null;
@@ -50,130 +52,176 @@ async function getRecentTransaction(userId, symbol, minutesAgo = 5) {
 }
 
 /**
- * Get holding from database
- */
-async function getHolding(userId, symbol) {
-    try {
-        const { data, error } = await supabase
-            .from('holdings')
-            .select('current_price, avg_purchase_price')
-            .eq('user_id', userId)
-            .eq('symbol', symbol)
-            .single();
-        
-        if (error || !data) {
-            return null;
-        }
-        
-        return {
-            currentPrice: data.current_price ? parseFloat(data.current_price) : null,
-            avgPurchasePrice: parseFloat(data.avg_purchase_price)
-        };
-    } catch (error) {
-        console.error(`Error fetching holding for ${symbol}:`, error);
-        return null;
-    }
-}
-
-/**
- * Helper function to fetch current prices with priority-based logic
+ * Fetch current prices for multiple symbols with priority-based logic
+ * Priority:
+ * 1. Recent transaction (< 5 min)
+ * 2. Live market data (if market open)
+ * 3. Holdings table current_price
+ * 4. Polygon /prev endpoint
+ * 5. Holdings avg_purchase_price
  */
 async function fetchCurrentPrices(symbols, userId) {
-    if (!symbols || symbols.length === 0) return {};
-    
     const prices = {};
     const POLYGON_KEY = process.env.POLYGON_API_KEY;
-    const marketOpen = isMarketOpen();
     
-    console.log(`[Portfolio] Market status: ${marketOpen ? 'OPEN' : 'CLOSED'} at ${new Date().toISOString()}`);
-    
-    const promises = symbols.map(async (symbol) => {
+    for (const symbol of symbols) {
         try {
-            let currentPrice = null;
-            let source = null;
-            
-            // PRIORITY 1: Check recent transactions (< 5 minutes)
-            if (userId) {
-                const recentTx = await getRecentTransaction(userId, symbol, 5);
-                if (recentTx) {
-                    currentPrice = recentTx.price;
-                    source = 'recent_transaction';
-                    console.log(`[Portfolio] ${symbol}: Using recent transaction price $${currentPrice}`);
-                }
+            // STEP 1: Check for recent transaction (< 5 minutes)
+            const recentTxPrice = await getRecentTransactionPrice(userId, symbol, 5);
+            if (recentTxPrice !== null) {
+                console.log(`[Portfolio] ${symbol}: Using recent transaction price $${recentTxPrice}`);
+                prices[symbol] = recentTxPrice;
+                continue;
             }
             
-            // PRIORITY 2: Fetch live market data (only if market open)
-            if (!currentPrice && marketOpen) {
+            // STEP 2: Check if market is open
+            const marketOpen = isMarketOpen();
+            
+            if (marketOpen) {
+                // STEP 3: Try to fetch live market data
                 try {
-                    const now = new Date();
-                    const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+                    const now = Date.now();
+                    const twoHoursAgo = now - (2 * 60 * 60 * 1000);
                     
-                    const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${twoHoursAgo.getTime()}/${now.getTime()}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
+                    const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${twoHoursAgo}/${now}?adjusted=true&sort=desc&limit=1&apiKey=${POLYGON_KEY}`;
                     const response = await fetch(url);
                     
                     if (response.ok) {
                         const data = await response.json();
                         if (data.status === 'OK' && data.results && data.results.length > 0) {
-                            currentPrice = parseFloat(data.results[0].c);
-                            source = 'polygon_aggregates';
-                            console.log(`[Portfolio] ${symbol}: Fetched live price $${currentPrice}`);
+                            const livePrice = parseFloat(data.results[0].c);
+                            console.log(`[Portfolio] ${symbol}: Using live market price $${livePrice}`);
+                            prices[symbol] = livePrice;
+                            continue;
                         }
                     }
                 } catch (error) {
-                    console.log(`[Portfolio] ${symbol}: Aggregates failed:`, error.message);
+                    console.warn(`[Portfolio] ${symbol}: Could not fetch live price:`, error.message);
                 }
+            } else {
+                console.log(`[Portfolio] ${symbol}: Market closed, skipping live data fetch`);
             }
             
-            // PRIORITY 3: Use holdings table current_price
-            if (!currentPrice && userId) {
-                const holding = await getHolding(userId, symbol);
-                if (holding && holding.currentPrice) {
-                    currentPrice = holding.currentPrice;
-                    source = 'holdings_table';
-                    console.log(`[Portfolio] ${symbol}: Using holdings.current_price $${currentPrice}`);
-                }
+            // STEP 4: Use holdings table current_price
+            const { data: holding, error: holdingError } = await supabase
+                .from('holdings')
+                .select('current_price, avg_purchase_price')
+                .eq('user_id', userId)
+                .eq('symbol', symbol)
+                .single();
+            
+            if (!holdingError && holding && holding.current_price) {
+                const holdingPrice = parseFloat(holding.current_price);
+                console.log(`[Portfolio] ${symbol}: Using holdings.current_price $${holdingPrice}`);
+                prices[symbol] = holdingPrice;
+                continue;
             }
             
-            // PRIORITY 4: Fetch from /prev
-            if (!currentPrice) {
-                try {
-                    const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
-                    const fallbackResponse = await fetch(fallbackUrl);
-                    const fallbackData = await fallbackResponse.json();
-                    
-                    if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
-                        currentPrice = parseFloat(fallbackData.results[0].c);
-                        source = 'polygon_prev';
-                        console.log(`[Portfolio] ${symbol}: Using /prev $${currentPrice}`);
+            // STEP 5: Fetch from Polygon /prev endpoint (last resort)
+            try {
+                const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+                const response = await fetch(url);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'OK' && data.results && data.results.length > 0) {
+                        const prevPrice = parseFloat(data.results[0].c);
+                        console.log(`[Portfolio] ${symbol}: Using /prev price $${prevPrice}`);
+                        prices[symbol] = prevPrice;
+                        continue;
                     }
-                } catch (error) {
-                    console.log(`[Portfolio] ${symbol}: /prev failed:`, error.message);
                 }
+            } catch (error) {
+                console.warn(`[Portfolio] ${symbol}: Could not fetch /prev price:`, error.message);
             }
             
-            // PRIORITY 5: Last resort
-            if (!currentPrice && userId) {
-                const holding = await getHolding(userId, symbol);
-                if (holding && holding.avgPurchasePrice) {
-                    currentPrice = holding.avgPurchasePrice;
-                    source = 'avg_purchase_price';
-                    console.log(`[Portfolio] ${symbol}: Using avg_purchase_price $${currentPrice}`);
-                }
-            }
-            
-            if (currentPrice) {
-                prices[symbol] = { current: currentPrice, source: source };
+            // STEP 6: Ultimate fallback - use avg_purchase_price
+            if (holding && holding.avg_purchase_price) {
+                const avgPrice = parseFloat(holding.avg_purchase_price);
+                console.log(`[Portfolio] ${symbol}: Using avg_purchase_price $${avgPrice} as fallback`);
+                prices[symbol] = avgPrice;
+            } else {
+                console.error(`[Portfolio] ${symbol}: No price available from any source`);
+                prices[symbol] = 0;
             }
             
         } catch (error) {
-            console.error(`[Portfolio] Error fetching price for ${symbol}:`, error);
+            console.error(`Error fetching price for ${symbol}:`, error);
+            prices[symbol] = 0;
         }
-    });
+    }
     
-    await Promise.all(promises);
     return prices;
 }
 
+/**
+ * Get today's opening price for a symbol (9:30 AM ET price)
+ */
+async function getTodayOpenPrice(symbol) {
+    try {
+        const POLYGON_KEY = process.env.POLYGON_API_KEY;
+        
+        // Get today's date in ET timezone
+        const now = new Date();
+        const etDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const today = etDate.toISOString().split('T')[0];
+        
+        // Fetch 1-day bar for today
+        const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/day/${today}/${today}?adjusted=true&apiKey=${POLYGON_KEY}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            return null;
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'OK' && data.results && data.results.length > 0) {
+            return parseFloat(data.results[0].o); // Return open price
+        }
+        
+        return null;
+    } catch (error) {
+        console.error(`Error fetching today's open price for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Get previous close price for a symbol
+ */
+async function getPreviousClosePrice(symbol) {
+    try {
+        const POLYGON_KEY = process.env.POLYGON_API_KEY;
+        
+        const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            return null;
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'OK' && data.results && data.results.length > 0) {
+            return parseFloat(data.results[0].c);
+        }
+        
+        return null;
+    } catch (error) {
+        console.error(`Error fetching previous close for ${symbol}:`, error);
+        return null;
+    }
+}
+
+// ========================================
+// ROUTES
+// ========================================
+
+/**
+ * GET /api/portfolio/summary
+ * Get portfolio summary (total value, cash, P&L, etc.)
+ */
 router.get('/summary', async (req, res) => {
     try {
         const { user_id } = req.query;
@@ -182,79 +230,91 @@ router.get('/summary', async (req, res) => {
             return res.status(400).json({ error: 'user_id required' });
         }
         
-        // Get user profile (cash_balance)
-        const { data: userProfile, error: profileError } = await supabase
+        // Get user profile (cash balance)
+        const { data: profile, error: profileError } = await supabase
             .from('user_profiles')
-            .select('cash_balance')
+            .select('cash_balance, starting_balance, created_at')
             .eq('user_id', user_id)
             .single();
         
-        if (profileError || !userProfile) {
+        if (profileError || !profile) {
             return res.status(404).json({ error: 'User profile not found' });
         }
         
         // Get all holdings
         const { data: holdings, error: holdingsError } = await supabase
             .from('holdings')
-            .select('symbol, quantity, avg_purchase_price')
+            .select('*')
             .eq('user_id', user_id);
         
         if (holdingsError) {
+            console.error('Error fetching holdings:', holdingsError);
             return res.status(500).json({ error: 'Failed to fetch holdings' });
         }
         
-        const cashBalance = parseFloat(userProfile.cash_balance);
-        let totalHoldingsValue = 0;
-        let todayGainLoss = 0;
+        // Calculate holdings value
+        let holdingsValue = 0;
         
-        // Calculate holdings value with current prices
         if (holdings && holdings.length > 0) {
             const symbols = holdings.map(h => h.symbol);
             const currentPrices = await fetchCurrentPrices(symbols, user_id);
             
+            // Update holdings with current prices and calculate total
             for (const holding of holdings) {
-                const priceData = currentPrices[holding.symbol];
-                if (priceData) {
-                    const currentPrice = priceData.current;
-                    const currentValue = holding.quantity * currentPrice;
-                    totalHoldingsValue += currentValue;
-                    
-                    // Get today's open for daily P&L calculation
-                    const todayOpen = await getTodayOpenPrice(holding.symbol);
-                    if (todayOpen) {
-                        const dailyChange = (currentPrice - todayOpen) * holding.quantity;
-                        todayGainLoss += dailyChange;
-                    }
-                    
-                    // Update holding in database with current price
-                    await supabase
-                        .from('holdings')
-                        .update({
-                            current_price: currentPrice,
-                            current_value: currentValue
-                        })
-                        .eq('user_id', user_id)
-                        .eq('symbol', holding.symbol);
-                }
+                const currentPrice = currentPrices[holding.symbol] || parseFloat(holding.current_price) || 0;
+                const quantity = parseFloat(holding.quantity);
+                const currentValue = quantity * currentPrice;
+                
+                holdingsValue += currentValue;
+                
+                // Update holding in database
+                await supabase
+                    .from('holdings')
+                    .update({
+                        current_price: currentPrice,
+                        current_value: currentValue,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', holding.id);
             }
         }
         
-        const totalValue = cashBalance + totalHoldingsValue;
-        const initialBalance = 10000;
-        const totalProfitLoss = totalValue - initialBalance;
-        const totalProfitLossPercent = (totalProfitLoss / initialBalance) * 100;
-        const todayPLPercent = totalValue > 0 ? (todayGainLoss / totalValue) * 100 : 0;
+        const cashBalance = parseFloat(profile.cash_balance);
+        const totalPortfolioValue = cashBalance + holdingsValue;
+        const startingBalance = parseFloat(profile.starting_balance);
+        
+        // Calculate overall P&L
+        const overallPnL = totalPortfolioValue - startingBalance;
+        const overallPnLPercent = (overallPnL / startingBalance) * 100;
+        
+        // Calculate today's P&L (compare to most recent snapshot or starting balance)
+        const { data: latestSnapshot } = await supabase
+            .from('portfolio_snapshots')
+            .select('total_value, cash_balance, holdings_value, created_at')
+            .eq('user_id', user_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+        
+        let todayPnL = 0;
+        let todayPnLPercent = 0;
+        
+        if (latestSnapshot) {
+            const previousTotal = parseFloat(latestSnapshot.total_value);
+            todayPnL = totalPortfolioValue - previousTotal;
+            todayPnLPercent = (todayPnL / previousTotal) * 100;
+        }
         
         res.json({
-            cash: cashBalance,
-            total_value: totalValue,
-            initial_balance: initialBalance,
-            total_profit_loss: totalProfitLoss,
-            total_profit_loss_percent: totalProfitLossPercent,
-            holdings_value: totalHoldingsValue,
-            num_holdings: holdings ? holdings.length : 0,
-            today_profit_loss: todayGainLoss,
-            today_profit_loss_percent: todayPLPercent
+            totalValue: totalPortfolioValue,
+            cashBalance: cashBalance,
+            holdingsValue: holdingsValue,
+            startingBalance: startingBalance,
+            overallPnL: overallPnL,
+            overallPnLPercent: overallPnLPercent,
+            todayPnL: todayPnL,
+            todayPnLPercent: todayPnLPercent,
+            lastUpdated: new Date().toISOString()
         });
         
     } catch (error) {
@@ -264,8 +324,8 @@ router.get('/summary', async (req, res) => {
 });
 
 /**
- * GET /api/portfolio/holdings?user_id=xxx
- * Get all holdings for a user with detailed calculations
+ * GET /api/portfolio/holdings
+ * Get all user holdings with current prices
  */
 router.get('/holdings', async (req, res) => {
     try {
@@ -275,13 +335,15 @@ router.get('/holdings', async (req, res) => {
             return res.status(400).json({ error: 'user_id required' });
         }
         
-        const { data: holdings, error } = await supabase
+        // Get holdings from database
+        const { data: holdings, error: holdingsError } = await supabase
             .from('holdings')
             .select('*')
             .eq('user_id', user_id)
-            .order('current_value', { ascending: false });
+            .order('created_at', { ascending: false });
         
-        if (error) {
+        if (holdingsError) {
+            console.error('Error fetching holdings:', holdingsError);
             return res.status(500).json({ error: 'Failed to fetch holdings' });
         }
         
@@ -289,60 +351,60 @@ router.get('/holdings', async (req, res) => {
             return res.json([]);
         }
         
-        // Fetch current prices and today's opens
+        // Fetch current prices for all symbols
         const symbols = holdings.map(h => h.symbol);
         const currentPrices = await fetchCurrentPrices(symbols, user_id);
         
-        // Enrich holdings with all calculations
-        const enrichedHoldings = await Promise.all(holdings.map(async (holding) => {
-            const priceData = currentPrices[holding.symbol];
-            const currentPrice = priceData ? priceData.current : (holding.current_price || holding.avg_purchase_price);
-            const todayOpen = await getTodayOpenPrice(holding.symbol);
-            
-            const currentValue = holding.quantity * currentPrice;
-            const totalCost = holding.avg_purchase_price * holding.quantity;
-            const totalProfitLoss = currentValue - totalCost;
-            const totalProfitLossPercent = (totalProfitLoss / totalCost) * 100;
-            
-            // Today's gain/loss calculations
-            let todayGainLoss = 0;
-            let todayGainLossPercent = 0;
-            let mostRecentChange = 0;
-            let mostRecentChangePercent = 0;
-            
-            if (todayOpen) {
-                todayGainLoss = (currentPrice - todayOpen) * holding.quantity;
-                todayGainLossPercent = ((currentPrice - todayOpen) / todayOpen) * 100;
-                mostRecentChange = currentPrice - todayOpen;
-                mostRecentChangePercent = ((currentPrice - todayOpen) / todayOpen) * 100;
+        // Fetch today's open prices for all symbols
+        const todayOpenPrices = {};
+        for (const symbol of symbols) {
+            const openPrice = await getTodayOpenPrice(symbol);
+            if (openPrice) {
+                todayOpenPrices[symbol] = openPrice;
             }
+        }
+        
+        // Enrich holdings with calculated values
+        const enrichedHoldings = holdings.map(holding => {
+            const symbol = holding.symbol;
+            const quantity = parseFloat(holding.quantity);
+            const avgPurchasePrice = parseFloat(holding.avg_purchase_price);
+            const currentPrice = currentPrices[symbol] || parseFloat(holding.current_price) || 0;
             
-            // Update database with latest values
-            await supabase
-                .from('holdings')
-                .update({
-                    current_price: currentPrice,
-                    current_value: currentValue
-                })
-                .eq('id', holding.id);
+            const currentValue = quantity * currentPrice;
+            const totalCost = quantity * avgPurchasePrice;
+            
+            // Overall P&L (since purchase)
+            const overallPnL = currentValue - totalCost;
+            const overallPnLPercent = (overallPnL / totalCost) * 100;
+            
+            // Today's P&L (since today's open)
+            let todayPnL = 0;
+            let todayPnLPercent = 0;
+            
+            if (todayOpenPrices[symbol]) {
+                const todayOpenValue = quantity * todayOpenPrices[symbol];
+                todayPnL = currentValue - todayOpenValue;
+                todayPnLPercent = (todayPnL / todayOpenValue) * 100;
+            }
             
             return {
                 id: holding.id,
-                symbol: holding.symbol,
-                name: holding.name || holding.symbol,
-                quantity: parseFloat(holding.quantity),
-                avg_purchase_price: parseFloat(holding.avg_purchase_price),
-                current_price: currentPrice,
-                current_value: currentValue,
-                total_cost: totalCost,
-                total_profit_loss: totalProfitLoss,
-                total_profit_loss_percent: totalProfitLossPercent,
-                today_gain_loss: todayGainLoss,
-                today_gain_loss_percent: todayGainLossPercent,
-                most_recent_change: mostRecentChange,
-                most_recent_change_percent: mostRecentChangePercent
+                symbol: symbol,
+                name: holding.name,
+                quantity: quantity,
+                avgPurchasePrice: avgPurchasePrice,
+                currentPrice: currentPrice,
+                currentValue: currentValue,
+                totalCost: totalCost,
+                overallPnL: overallPnL,
+                overallPnLPercent: overallPnLPercent,
+                todayPnL: todayPnL,
+                todayPnLPercent: todayPnLPercent,
+                createdAt: holding.created_at,
+                updatedAt: holding.updated_at
             };
-        }));
+        });
         
         res.json(enrichedHoldings);
         
@@ -353,29 +415,26 @@ router.get('/holdings', async (req, res) => {
 });
 
 /**
- * GET /api/portfolio/transactions?user_id=xxx&days=10
- * Get transaction history for a user (filtered by days)
+ * GET /api/portfolio/transactions
+ * Get user transaction history
  */
 router.get('/transactions', async (req, res) => {
     try {
-        const { user_id, days = 10 } = req.query;
+        const { user_id, limit = 50 } = req.query;
         
         if (!user_id) {
             return res.status(400).json({ error: 'user_id required' });
         }
         
-        const daysInt = parseInt(days);
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - daysInt);
-        
         const { data: transactions, error } = await supabase
             .from('transactions')
             .select('*')
             .eq('user_id', user_id)
-            .gte('executed_at', startDate.toISOString())
-            .order('executed_at', { ascending: false });
+            .order('executed_at', { ascending: false })
+            .limit(parseInt(limit));
         
         if (error) {
+            console.error('Error fetching transactions:', error);
             return res.status(500).json({ error: 'Failed to fetch transactions' });
         }
         
@@ -388,125 +447,42 @@ router.get('/transactions', async (req, res) => {
 });
 
 /**
- * GET /api/portfolio/snapshots?user_id=xxx&period=1D
- * Get portfolio snapshots for performance chart
+ * POST /api/portfolio/snapshot
+ * Create a portfolio snapshot (for tracking daily P&L)
  */
-router.get('/snapshots', async (req, res) => {
+router.post('/snapshot', async (req, res) => {
     try {
-        const { user_id, period = '1D' } = req.query;
+        const { user_id } = req.body;
         
         if (!user_id) {
             return res.status(400).json({ error: 'user_id required' });
         }
         
-        // Calculate time range based on period
-        const now = new Date();
-        let startDate;
-        
-        switch (period) {
-            case '1D':
-                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                break;
-            case '1W':
-                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                break;
-            case '1M':
-                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                break;
-            case '3M':
-                startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-                break;
-            case '1Y':
-                startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-                break;
-            default:
-                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        }
-        
-        const { data: snapshots, error } = await supabase
-            .from('portfolio_snapshots')
-            .select('*')
-            .eq('user_id', user_id)
-            .gte('snapshot_at', startDate.toISOString())
-            .order('snapshot_at', { ascending: true });
-        
-        if (error) {
-            console.error('[Portfolio] Supabase error:', error);
-            return res.status(500).json({ error: 'Failed to fetch snapshots' });
-        }
-        
-        // If no snapshots exist, return current portfolio value as single point
-        if (!snapshots || snapshots.length === 0) {
-            // Get current portfolio value
-            const { data: userProfile } = await supabase
-                .from('user_profiles')
-                .select('cash_balance')
-                .eq('user_id', user_id)
-                .single();
-            
-            const { data: holdings } = await supabase
-                .from('holdings')
-                .select('current_value')
-                .eq('user_id', user_id);
-            
-            const cashBalance = userProfile ? parseFloat(userProfile.cash_balance) : 10000;
-            const holdingsValue = holdings ? holdings.reduce((sum, h) => sum + parseFloat(h.current_value || 0), 0) : 0;
-            const totalValue = cashBalance + holdingsValue;
-            
-            // Return single snapshot at current time
-            return res.json([{
-                user_id,
-                total_value: totalValue,
-                cash_balance: cashBalance,
-                holdings_value: holdingsValue,
-                snapshot_at: now.toISOString()
-            }]);
-        }
-        
-        res.json(snapshots);
-        
-    } catch (error) {
-        console.error('[Portfolio] Exception in snapshots route:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-/**
- * GET /api/portfolio/detailed-summary?user_id=xxx
- * Get comprehensive portfolio summary for modal
- */
-router.get('/detailed-summary', async (req, res) => {
-    try {
-        const { user_id } = req.query;
-        
-        if (!user_id) {
-            return res.status(400).json({ error: 'user_id required' });
-        }
-        
-        // Get summary data
+        // Get current portfolio summary
         const summaryResponse = await fetch(`${req.protocol}://${req.get('host')}/api/portfolio/summary?user_id=${user_id}`);
         const summary = await summaryResponse.json();
         
-        // Get detailed holdings
-        const holdingsResponse = await fetch(`${req.protocol}://${req.get('host')}/api/portfolio/holdings?user_id=${user_id}`);
-        const holdings = await holdingsResponse.json();
+        // Create snapshot
+        const { data: snapshot, error } = await supabase
+            .from('portfolio_snapshots')
+            .insert({
+                user_id: user_id,
+                total_value: summary.totalValue,
+                cash_balance: summary.cashBalance,
+                holdings_value: summary.holdingsValue
+            })
+            .select()
+            .single();
         
-        // Calculate total invested
-        const totalInvested = holdings.reduce((sum, h) => sum + h.total_cost, 0);
+        if (error) {
+            console.error('Error creating snapshot:', error);
+            return res.status(500).json({ error: 'Failed to create snapshot' });
+        }
         
-        res.json({
-            totalValue: summary.total_value,
-            availableToTrade: summary.cash,
-            totalInvested: totalInvested,
-            unrealizedGains: summary.total_profit_loss,
-            unrealizedGainsPercent: summary.total_profit_loss_percent,
-            todayChange: summary.today_profit_loss,
-            todayChangePercent: summary.today_profit_loss_percent,
-            positions: holdings
-        });
+        res.json(snapshot);
         
     } catch (error) {
-        console.error('Error fetching detailed summary:', error);
+        console.error('Error creating snapshot:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
