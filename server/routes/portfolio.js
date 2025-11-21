@@ -7,105 +7,187 @@ import cacheService from '../services/cacheService.js';
 const router = express.Router();
 
 /**
- * Helper function to fetch current prices from Polygon (including after-hours)
- * Uses aggregates endpoint (same as trading chart) for consistency
+ * Check if market is currently open for trading
  */
-async function fetchCurrentPrices(symbols) {
+function isMarketOpen() {
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const hours = etTime.getHours();
+    const minutes = etTime.getMinutes();
+    const timeDecimal = hours + minutes / 60;
+    
+    // Pre-market: 4:00 AM - 9:30 AM
+    // Regular: 9:30 AM - 4:00 PM  
+    // After-hours: 4:00 PM - 8:00 PM
+    // Closed: 8:00 PM - 4:00 AM
+    return timeDecimal >= 4 && timeDecimal < 20;
+}
+
+/**
+ * Get most recent transaction for a symbol (within X minutes)
+ */
+async function getRecentTransaction(userId, symbol, minutesAgo = 5) {
+    try {
+        const cutoff = new Date(Date.now() - minutesAgo * 60 * 1000);
+        
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('price, executed_at')
+            .eq('user_id', userId)
+            .eq('symbol', symbol)
+            .gte('executed_at', cutoff.toISOString())
+            .order('executed_at', { ascending: false })
+            .limit(1);
+        
+        if (error || !data || data.length === 0) {
+            return null;
+        }
+        
+        return {
+            price: parseFloat(data[0].price),
+            executedAt: data[0].executed_at
+        };
+    } catch (error) {
+        console.error(`Error fetching recent transaction for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Get holding from database
+ */
+async function getHolding(userId, symbol) {
+    try {
+        const { data, error } = await supabase
+            .from('holdings')
+            .select('current_price, avg_purchase_price')
+            .eq('user_id', userId)
+            .eq('symbol', symbol)
+            .single();
+        
+        if (error || !data) {
+            return null;
+        }
+        
+        return {
+            currentPrice: data.current_price ? parseFloat(data.current_price) : null,
+            avgPurchasePrice: parseFloat(data.avg_purchase_price)
+        };
+    } catch (error) {
+        console.error(`Error fetching holding for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Helper function to fetch current prices
+ * PRIORITY ORDER:
+ * 1. Recent transactions (< 5 min) - Most accurate!
+ * 2. Live market data (if market open 4 AM - 8 PM)
+ * 3. Holdings table current_price (last known good)
+ * 4. Polygon /prev (today's close)
+ * 5. Holdings avg_purchase_price (last resort)
+ */
+async function fetchCurrentPrices(symbols, userId) {
     if (!symbols || symbols.length === 0) return {};
     
     const prices = {};
     const POLYGON_KEY = process.env.POLYGON_API_KEY;
+    const marketOpen = isMarketOpen();
+    
+    console.log(`[Portfolio] Market status: ${marketOpen ? 'OPEN' : 'CLOSED'} at ${new Date().toISOString()}`);
     
     const promises = symbols.map(async (symbol) => {
         try {
-            // Calculate time range: last 2 hours using Unix timestamps for precise window
-            const now = new Date();
-            const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+            let currentPrice = null;
+            let source = null;
             
-            // Use Unix timestamps (milliseconds) for accurate time ranges
-            const fromTimestamp = twoHoursAgo.getTime();
-            const toTimestamp = now.getTime();
-            
-            console.log(`[Portfolio] Fetching ${symbol} - From: ${new Date(fromTimestamp).toISOString()} To: ${new Date(toTimestamp).toISOString()}`);
-            
-            // Use aggregates endpoint (1-minute bars) - same as trading chart
-            // This includes after-hours data automatically
-            const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromTimestamp}/${toTimestamp}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
-            const response = await fetch(url);
-            
-            console.log(`[Portfolio] ${symbol} aggregates response status: ${response.status}`);
-            
-            if (!response.ok) {
-                console.log(`[Portfolio] ${symbol} aggregates failed, using fallback /prev`);
-                // Fallback to previous day if aggregates fail
-                const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
-                const fallbackResponse = await fetch(fallbackUrl);
-                const fallbackData = await fallbackResponse.json();
-                
-                if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
-                    const result = fallbackData.results[0];
-                    console.log(`[Portfolio] ${symbol} /prev fallback price: ${result.c}`);
-                    prices[symbol] = {
-                        current: parseFloat(result.c),
-                        open: parseFloat(result.o),
-                        high: parseFloat(result.h),
-                        low: parseFloat(result.l),
-                        previousClose: parseFloat(result.c)
-                    };
+            // PRIORITY 1: Check recent transactions (< 5 minutes)
+            if (userId) {
+                const recentTx = await getRecentTransaction(userId, symbol, 5);
+                if (recentTx) {
+                    currentPrice = recentTx.price;
+                    source = 'recent_transaction';
+                    console.log(`[Portfolio] ${symbol}: Using recent transaction price $${currentPrice} from ${recentTx.executedAt}`);
                 }
-                return;
             }
             
-            const data = await response.json();
+            // PRIORITY 2: Fetch live market data (only if market open and no recent transaction)
+            if (!currentPrice && marketOpen) {
+                try {
+                    const now = new Date();
+                    const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+                    
+                    const fromTimestamp = twoHoursAgo.getTime();
+                    const toTimestamp = now.getTime();
+                    
+                    const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromTimestamp}/${toTimestamp}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
+                    const response = await fetch(url);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        if (data.status === 'OK' && data.results && data.results.length > 0) {
+                            const latestBar = data.results[0];
+                            currentPrice = parseFloat(latestBar.c);
+                            source = 'polygon_aggregates';
+                            console.log(`[Portfolio] ${symbol}: Fetched live price $${currentPrice} from aggregates (${data.results.length} bars)`);
+                        }
+                    }
+                } catch (error) {
+                    console.log(`[Portfolio] ${symbol}: Aggregates fetch failed:`, error.message);
+                }
+            }
             
-            console.log(`[Portfolio] ${symbol} aggregates status: ${data.status}, results count: ${data.results?.length || 0}`);
+            // PRIORITY 3: Use holdings table current_price
+            if (!currentPrice && userId) {
+                const holding = await getHolding(userId, symbol);
+                if (holding && holding.currentPrice) {
+                    currentPrice = holding.currentPrice;
+                    source = 'holdings_table';
+                    console.log(`[Portfolio] ${symbol}: Using holdings.current_price $${currentPrice}`);
+                }
+            }
             
-            if (data.status === 'OK' && data.results && data.results.length > 0) {
-                // Get most recent bar (index 0 because we sorted desc)
-                const latestBar = data.results[0];
-                
-                console.log(`[Portfolio] ${symbol} latest bar: time=${new Date(latestBar.t).toISOString()}, close=${latestBar.c}`);
-                
-                // For day's high/low, we need to look at all bars from today
-                let dayHigh = latestBar.h;
-                let dayLow = latestBar.l;
-                let dayOpen = data.results[data.results.length - 1].o; // First bar of the day
-                
-                // Calculate high/low from all bars
-                data.results.forEach(bar => {
-                    if (bar.h > dayHigh) dayHigh = bar.h;
-                    if (bar.l < dayLow) dayLow = bar.l;
-                });
-                
+            // PRIORITY 4: Fetch from /prev (today's close)
+            if (!currentPrice) {
+                try {
+                    const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
+                    const fallbackResponse = await fetch(fallbackUrl);
+                    const fallbackData = await fallbackResponse.json();
+                    
+                    if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
+                        currentPrice = parseFloat(fallbackData.results[0].c);
+                        source = 'polygon_prev';
+                        console.log(`[Portfolio] ${symbol}: Using /prev close $${currentPrice}`);
+                    }
+                } catch (error) {
+                    console.log(`[Portfolio] ${symbol}: /prev fetch failed:`, error.message);
+                }
+            }
+            
+            // PRIORITY 5: Last resort - avg_purchase_price
+            if (!currentPrice && userId) {
+                const holding = await getHolding(userId, symbol);
+                if (holding && holding.avgPurchasePrice) {
+                    currentPrice = holding.avgPurchasePrice;
+                    source = 'avg_purchase_price';
+                    console.log(`[Portfolio] ${symbol}: Fallback to avg_purchase_price $${currentPrice}`);
+                }
+            }
+            
+            if (currentPrice) {
                 prices[symbol] = {
-                    current: parseFloat(latestBar.c),      // Most recent close (inc. after-hours)
-                    open: parseFloat(dayOpen),             // First bar open
-                    high: parseFloat(dayHigh),             // Highest of all bars
-                    low: parseFloat(dayLow),               // Lowest of all bars
-                    previousClose: parseFloat(latestBar.c) // Use current as prev (will be replaced by proper logic)
+                    current: currentPrice,
+                    source: source
                 };
-                
-                console.log(`[Portfolio] ${symbol} final price set: ${prices[symbol].current}`);
+                console.log(`[Portfolio] ${symbol}: Final price $${currentPrice} (source: ${source})`);
             } else {
-                console.log(`[Portfolio] ${symbol} no results from aggregates, using fallback /prev`);
-                // No recent data, fallback to /prev
-                const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
-                const fallbackResponse = await fetch(fallbackUrl);
-                const fallbackData = await fallbackResponse.json();
-                
-                if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
-                    const result = fallbackData.results[0];
-                    prices[symbol] = {
-                        current: parseFloat(result.c),
-                        open: parseFloat(result.o),
-                        high: parseFloat(result.h),
-                        low: parseFloat(result.l),
-                        previousClose: parseFloat(result.c)
-                    };
-                }
+                console.error(`[Portfolio] ${symbol}: Could not determine price from any source!`);
             }
+            
         } catch (error) {
-            console.error(`Error fetching price for ${symbol}:`, error);
+            console.error(`[Portfolio] Error fetching price for ${symbol}:`, error);
         }
     });
     
@@ -113,135 +195,6 @@ async function fetchCurrentPrices(symbols) {
     return prices;
 }
 
-/**
- * Get today's open price (cached per symbol per day)
- */
-async function getTodayOpenPrice(symbol) {
-    // Check cache first
-    const cacheKey = `today_open:${symbol}`;
-    const cached = cacheService.get(cacheKey);
-    
-    if (cached) {
-        return cached;
-    }
-    
-    // Fetch from Polygon - get today's data
-    try {
-        const POLYGON_KEY = process.env.POLYGON_API_KEY;
-        const today = new Date().toISOString().split('T')[0];
-        
-        // Try to get today's bar first (if market has opened)
-        const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/day/${today}/${today}?adjusted=true&apiKey=${POLYGON_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        let openPrice = null;
-        
-        if (data.status === 'OK' && data.results && data.results.length > 0) {
-            openPrice = parseFloat(data.results[0].o);
-        } else {
-            // Market hasn't opened yet or no data - use previous close as fallback
-            const prevUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
-            const prevResponse = await fetch(prevUrl);
-            const prevData = await prevResponse.json();
-            
-            if (prevData.status === 'OK' && prevData.results && prevData.results.length > 0) {
-                openPrice = parseFloat(prevData.results[0].c); // Use prev close
-            }
-        }
-        
-        if (openPrice) {
-            // Cache until end of day (expires at midnight)
-            const now = new Date();
-            const midnight = new Date(now);
-            midnight.setHours(24, 0, 0, 0);
-            const ttl = midnight - now;
-            
-            cacheService.set(cacheKey, openPrice, ttl);
-        }
-        
-        return openPrice;
-    } catch (error) {
-        console.error(`Error fetching today's open for ${symbol}:`, error);
-        return null;
-    }
-}
-
-/**
- * Get most recent snapshot price for a holding (for Recent Change calculation)
- */
-async function getRecentSnapshotPrice(userId, symbol) {
-    try {
-        // Get the most recent snapshot (within last 30 minutes)
-        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-        
-        const { data: snapshots, error } = await supabase
-            .from('holdings_snapshots')
-            .select('price')
-            .eq('user_id', userId)
-            .eq('symbol', symbol)
-            .gte('snapshot_at', thirtyMinutesAgo)
-            .order('snapshot_at', { ascending: false })
-            .limit(1);
-        
-        if (error || !snapshots || snapshots.length === 0) {
-            return null;
-        }
-        
-        return parseFloat(snapshots[0].price);
-    } catch (error) {
-        console.error(`Error fetching recent snapshot for ${symbol}:`, error);
-        return null;
-    }
-}
-
-/**
- * Check if holding was purchased today
- */
-async function wasPurchasedToday(userId, symbol) {
-    try {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        
-        const { data: transactions, error } = await supabase
-            .from('transactions')
-            .select('executed_at')
-            .eq('user_id', userId)
-            .eq('symbol', symbol)
-            .eq('type', 'BUY')
-            .gte('executed_at', todayStart.toISOString())
-            .order('executed_at', { ascending: false })
-            .limit(1);
-        
-        return !error && transactions && transactions.length > 0;
-    } catch (error) {
-        console.error(`Error checking if ${symbol} was purchased today:`, error);
-        return false;
-    }
-}
-
-/**
- * GET /api/portfolio/summary?user_id=xxx
- * Get portfolio summary (cash, total value, P&L)
- */
-router.get('/summary', async (req, res) => {
-    try {
-        const { user_id } = req.query;
-        
-        if (!user_id) {
-            return res.status(400).json({ error: 'user_id required' });
-        }
-        
-        // Get user profile (cash_balance)
-        const { data: userProfile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('cash_balance')
-            .eq('user_id', user_id)
-            .single();
-        
-        if (profileError || !userProfile) {
-            return res.status(404).json({ error: 'User profile not found' });
-        }
         
         // Get all holdings
         const { data: holdings, error: holdingsError } = await supabase
@@ -260,7 +213,7 @@ router.get('/summary', async (req, res) => {
         // Calculate holdings value with current prices
         if (holdings && holdings.length > 0) {
             const symbols = holdings.map(h => h.symbol);
-            const currentPrices = await fetchCurrentPrices(symbols);
+            const currentPrices = await fetchCurrentPrices(symbols, user_id);
             
             for (const holding of holdings) {
                 const priceData = currentPrices[holding.symbol];
@@ -307,15 +260,11 @@ router.get('/summary', async (req, res) => {
             today_profit_loss_percent: todayPLPercent
         });
         
-    } catch (error) {
-        console.error('Error fetching portfolio summary:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+
 
 /**
  * GET /api/portfolio/holdings?user_id=xxx
- * Get all holdings for a user with detailed calculations including Intraday G/L
+ * Get all holdings for a user with detailed calculations
  */
 router.get('/holdings', async (req, res) => {
     try {
@@ -341,50 +290,30 @@ router.get('/holdings', async (req, res) => {
         
         // Fetch current prices and today's opens
         const symbols = holdings.map(h => h.symbol);
-        const currentPrices = await fetchCurrentPrices(symbols);
+        const currentPrices = await fetchCurrentPrices(symbols, user_id);
         
+        // Enrich holdings with all calculations
         const enrichedHoldings = await Promise.all(holdings.map(async (holding) => {
             const priceData = currentPrices[holding.symbol];
             const currentPrice = priceData ? priceData.current : (holding.current_price || holding.avg_purchase_price);
             const todayOpen = await getTodayOpenPrice(holding.symbol);
-            const recentSnapshotPrice = await getRecentSnapshotPrice(user_id, holding.symbol);
-            const purchasedToday = await wasPurchasedToday(user_id, holding.symbol);
-            
-            // Today's high/low (from Polygon data)
-            const todayHigh = priceData ? priceData.high : null;
-            const todayLow = priceData ? priceData.low : null;
             
             const currentValue = holding.quantity * currentPrice;
             const totalCost = holding.avg_purchase_price * holding.quantity;
+            const totalProfitLoss = currentValue - totalCost;
+            const totalProfitLossPercent = (totalProfitLoss / totalCost) * 100;
             
-            // INTRADAY G/L - Profit/loss from purchase price (always available immediately)
-            const intradayGL = currentValue - totalCost;
-            const intradayGLPercent = (intradayGL / totalCost) * 100;
+            // Today's gain/loss calculations
+            let todayGainLoss = 0;
+            let todayGainLossPercent = 0;
+            let mostRecentChange = 0;
+            let mostRecentChangePercent = 0;
             
-            // TOTAL G/L - Same as Intraday G/L (overall profit/loss)
-            const totalProfitLoss = intradayGL;
-            const totalProfitLossPercent = intradayGLPercent;
-            
-            // TODAY'S G/L - Only available if position was held at market open today
-            let todayGainLoss = null;
-            let todayGainLossPercent = null;
-            
-            if (todayOpen && !purchasedToday) {
+            if (todayOpen) {
                 todayGainLoss = (currentPrice - todayOpen) * holding.quantity;
                 todayGainLossPercent = ((currentPrice - todayOpen) / todayOpen) * 100;
-            }
-            
-            // RECENT CHANGE - Only available after first snapshot is created
-            let mostRecentChange = null;
-            let mostRecentChangePercent = null;
-            
-            if (recentSnapshotPrice) {
-                mostRecentChange = currentPrice - recentSnapshotPrice;
-                mostRecentChangePercent = ((currentPrice - recentSnapshotPrice) / recentSnapshotPrice) * 100;
-            } else if (purchasedToday) {
-                // For brand new positions, use purchase price as "snapshot"
-                mostRecentChange = currentPrice - holding.avg_purchase_price;
-                mostRecentChangePercent = ((currentPrice - holding.avg_purchase_price) / holding.avg_purchase_price) * 100;
+                mostRecentChange = currentPrice - todayOpen;
+                mostRecentChangePercent = ((currentPrice - todayOpen) / todayOpen) * 100;
             }
             
             // Update database with latest values
@@ -405,32 +334,14 @@ router.get('/holdings', async (req, res) => {
                 current_price: currentPrice,
                 current_value: currentValue,
                 total_cost: totalCost,
-                // Day's range
-                today_high: todayHigh,
-                today_low: todayLow,
-                // Four G/L metrics
-                intraday_gain_loss: intradayGL,
-                intraday_gain_loss_percent: intradayGLPercent,
-                most_recent_change: mostRecentChange,
-                most_recent_change_percent: mostRecentChangePercent,
-                today_gain_loss: todayGainLoss,
-                today_gain_loss_percent: todayGainLossPercent,
                 total_profit_loss: totalProfitLoss,
                 total_profit_loss_percent: totalProfitLossPercent,
-                // Metadata flags
-                is_new_position: purchasedToday,
-                has_recent_snapshot: recentSnapshotPrice !== null
+                today_gain_loss: todayGainLoss,
+                today_gain_loss_percent: todayGainLossPercent,
+                most_recent_change: mostRecentChange,
+                most_recent_change_percent: mostRecentChangePercent
             };
         }));
-        
-        // Calculate % of portfolio for each holding
-        const totalPortfolioValue = enrichedHoldings.reduce((sum, h) => sum + h.current_value, 0);
-        
-        enrichedHoldings.forEach(holding => {
-            holding.portfolio_percentage = totalPortfolioValue > 0 
-                ? (holding.current_value / totalPortfolioValue) * 100 
-                : 0;
-        });
         
         res.json(enrichedHoldings);
         
