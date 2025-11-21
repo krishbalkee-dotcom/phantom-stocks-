@@ -173,6 +173,9 @@ async function loadChart(symbol, timeframe) {
         // Update trade card with symbol info
         await updateTradeCard(symbol);
         
+        // Update trading UI based on market session
+        updateTradingUI();
+        
         console.log('Chart loaded successfully');
     } catch (error) {
         console.error('Error loading chart:', error);
@@ -596,6 +599,111 @@ async function handleTrade(action) {
     } catch (error) {
         console.error('Trade execution error:', error);
         showNotification(error.message || 'Trade failed');
+    }
+}
+
+/**
+ * Trading Session Detection
+ */
+function getTradingSession() {
+    const now = new Date();
+    const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const hours = etTime.getHours();
+    const minutes = etTime.getMinutes();
+    const timeDecimal = hours + minutes / 60;
+    
+    if (timeDecimal >= 4 && timeDecimal < 9.5) {
+        return 'PRE_MARKET';
+    } else if (timeDecimal >= 9.5 && timeDecimal < 16) {
+        return 'REGULAR';
+    } else if (timeDecimal >= 16 && timeDecimal < 20) {
+        return 'AFTER_HOURS';
+    } else {
+        return 'CLOSED';
+    }
+}
+
+function isMarketOpen() {
+    const session = getTradingSession();
+    return session !== 'CLOSED';
+}
+
+function getSessionInfo() {
+    const session = getTradingSession();
+    
+    const sessionConfig = {
+        'PRE_MARKET': {
+            label: 'PRE-MARKET TRADING',
+            message: 'Limited liquidity. Prices may be volatile.',
+            tradingEnabled: true
+        },
+        'REGULAR': {
+            label: 'MARKET OPEN',
+            message: '',
+            tradingEnabled: true
+        },
+        'AFTER_HOURS': {
+            label: 'AFTER-HOURS TRADING',
+            message: 'Lower volume. Prices delayed 15 minutes.',
+            tradingEnabled: true
+        },
+        'CLOSED': {
+            label: 'MARKET CLOSED',
+            message: 'Trading resumes at 4:00 AM ET (Pre-Market)',
+            tradingEnabled: false
+        }
+    };
+    
+    return sessionConfig[session];
+}
+
+function updateTradingUI() {
+    const sessionInfo = getSessionInfo();
+    const buyButton = document.getElementById('buyButton');
+    const sellButton = document.getElementById('sellButton');
+    const quantityInput = document.getElementById('quantityInput');
+    
+    if (!sessionInfo.tradingEnabled) {
+        // Disable trading
+        if (buyButton) {
+            buyButton.disabled = true;
+            buyButton.style.opacity = '0.5';
+            buyButton.style.cursor = 'not-allowed';
+        }
+        if (sellButton) {
+            sellButton.disabled = true;
+            sellButton.style.opacity = '0.5';
+            sellButton.style.cursor = 'not-allowed';
+        }
+        if (quantityInput) {
+            quantityInput.disabled = true;
+            quantityInput.style.opacity = '0.5';
+        }
+        
+        // Show market closed message
+        showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
+    } else {
+        // Enable trading
+        if (buyButton) {
+            buyButton.disabled = false;
+            buyButton.style.opacity = '1';
+            buyButton.style.cursor = 'pointer';
+        }
+        if (sellButton) {
+            sellButton.disabled = false;
+            sellButton.style.opacity = '1';
+            sellButton.style.cursor = 'pointer';
+        }
+        if (quantityInput) {
+            quantityInput.disabled = false;
+            quantityInput.style.opacity = '1';
+        }
+        
+        // Show session warning if not regular hours
+        const session = getTradingSession();
+        if (session !== 'REGULAR' && sessionInfo.message) {
+            showNotification(`${sessionInfo.label}: ${sessionInfo.message}`);
+        }
     }
 }
 
