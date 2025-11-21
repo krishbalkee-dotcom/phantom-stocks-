@@ -16,10 +16,6 @@ function isMarketOpen() {
     const minutes = etTime.getMinutes();
     const timeDecimal = hours + minutes / 60;
     
-    // Pre-market: 4:00 AM - 9:30 AM
-    // Regular: 9:30 AM - 4:00 PM  
-    // After-hours: 4:00 PM - 8:00 PM
-    // Closed: 8:00 PM - 4:00 AM
     return timeDecimal >= 4 && timeDecimal < 20;
 }
 
@@ -80,13 +76,7 @@ async function getHolding(userId, symbol) {
 }
 
 /**
- * Helper function to fetch current prices
- * PRIORITY ORDER:
- * 1. Recent transactions (< 5 min) - Most accurate!
- * 2. Live market data (if market open 4 AM - 8 PM)
- * 3. Holdings table current_price (last known good)
- * 4. Polygon /prev (today's close)
- * 5. Holdings avg_purchase_price (last resort)
+ * Helper function to fetch current prices with priority-based logic
  */
 async function fetchCurrentPrices(symbols, userId) {
     if (!symbols || symbols.length === 0) return {};
@@ -108,34 +98,29 @@ async function fetchCurrentPrices(symbols, userId) {
                 if (recentTx) {
                     currentPrice = recentTx.price;
                     source = 'recent_transaction';
-                    console.log(`[Portfolio] ${symbol}: Using recent transaction price $${currentPrice} from ${recentTx.executedAt}`);
+                    console.log(`[Portfolio] ${symbol}: Using recent transaction price $${currentPrice}`);
                 }
             }
             
-            // PRIORITY 2: Fetch live market data (only if market open and no recent transaction)
+            // PRIORITY 2: Fetch live market data (only if market open)
             if (!currentPrice && marketOpen) {
                 try {
                     const now = new Date();
                     const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
                     
-                    const fromTimestamp = twoHoursAgo.getTime();
-                    const toTimestamp = now.getTime();
-                    
-                    const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromTimestamp}/${toTimestamp}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
+                    const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${twoHoursAgo.getTime()}/${now.getTime()}?adjusted=true&sort=desc&limit=30&apiKey=${POLYGON_KEY}`;
                     const response = await fetch(url);
                     
                     if (response.ok) {
                         const data = await response.json();
-                        
                         if (data.status === 'OK' && data.results && data.results.length > 0) {
-                            const latestBar = data.results[0];
-                            currentPrice = parseFloat(latestBar.c);
+                            currentPrice = parseFloat(data.results[0].c);
                             source = 'polygon_aggregates';
-                            console.log(`[Portfolio] ${symbol}: Fetched live price $${currentPrice} from aggregates (${data.results.length} bars)`);
+                            console.log(`[Portfolio] ${symbol}: Fetched live price $${currentPrice}`);
                         }
                     }
                 } catch (error) {
-                    console.log(`[Portfolio] ${symbol}: Aggregates fetch failed:`, error.message);
+                    console.log(`[Portfolio] ${symbol}: Aggregates failed:`, error.message);
                 }
             }
             
@@ -149,7 +134,7 @@ async function fetchCurrentPrices(symbols, userId) {
                 }
             }
             
-            // PRIORITY 4: Fetch from /prev (today's close)
+            // PRIORITY 4: Fetch from /prev
             if (!currentPrice) {
                 try {
                     const fallbackUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_KEY}`;
@@ -159,31 +144,25 @@ async function fetchCurrentPrices(symbols, userId) {
                     if (fallbackData.status === 'OK' && fallbackData.results && fallbackData.results.length > 0) {
                         currentPrice = parseFloat(fallbackData.results[0].c);
                         source = 'polygon_prev';
-                        console.log(`[Portfolio] ${symbol}: Using /prev close $${currentPrice}`);
+                        console.log(`[Portfolio] ${symbol}: Using /prev $${currentPrice}`);
                     }
                 } catch (error) {
-                    console.log(`[Portfolio] ${symbol}: /prev fetch failed:`, error.message);
+                    console.log(`[Portfolio] ${symbol}: /prev failed:`, error.message);
                 }
             }
             
-            // PRIORITY 5: Last resort - avg_purchase_price
+            // PRIORITY 5: Last resort
             if (!currentPrice && userId) {
                 const holding = await getHolding(userId, symbol);
                 if (holding && holding.avgPurchasePrice) {
                     currentPrice = holding.avgPurchasePrice;
                     source = 'avg_purchase_price';
-                    console.log(`[Portfolio] ${symbol}: Fallback to avg_purchase_price $${currentPrice}`);
+                    console.log(`[Portfolio] ${symbol}: Using avg_purchase_price $${currentPrice}`);
                 }
             }
             
             if (currentPrice) {
-                prices[symbol] = {
-                    current: currentPrice,
-                    source: source
-                };
-                console.log(`[Portfolio] ${symbol}: Final price $${currentPrice} (source: ${source})`);
-            } else {
-                console.error(`[Portfolio] ${symbol}: Could not determine price from any source!`);
+                prices[symbol] = { current: currentPrice, source: source };
             }
             
         } catch (error) {
@@ -195,6 +174,24 @@ async function fetchCurrentPrices(symbols, userId) {
     return prices;
 }
 
+router.get('/summary', async (req, res) => {
+    try {
+        const { user_id } = req.query;
+        
+        if (!user_id) {
+            return res.status(400).json({ error: 'user_id required' });
+        }
+        
+        // Get user profile (cash_balance)
+        const { data: userProfile, error: profileError } = await supabase
+            .from('user_profiles')
+            .select('cash_balance')
+            .eq('user_id', user_id)
+            .single();
+        
+        if (profileError || !userProfile) {
+            return res.status(404).json({ error: 'User profile not found' });
+        }
         
         // Get all holdings
         const { data: holdings, error: holdingsError } = await supabase
@@ -260,7 +257,11 @@ async function fetchCurrentPrices(symbols, userId) {
             today_profit_loss_percent: todayPLPercent
         });
         
-
+    } catch (error) {
+        console.error('Error fetching portfolio summary:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 /**
  * GET /api/portfolio/holdings?user_id=xxx
